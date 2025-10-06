@@ -7,7 +7,7 @@ ALL I'VE DONE IS MAKE AN ENVIRONMENT THAT WE CAN WORK OFF
 from spatialmath import SE3
 from spatialmath.base import *
 from math import pi
-from ir_support import UR3
+from customUr3e import UR3e
 import swift
 from spatialgeometry import Mesh
 import time
@@ -20,6 +20,7 @@ from ir_support import CylindricalDHRobotPlot
 from gp4 import newGP4
 import numpy as np
 from robotSystem import newRobotSystem
+from Grippers import gripperObj
 
 
 # ---------------------------------------------------------------------------------------#
@@ -30,7 +31,7 @@ def initialise():
     env.add(envRoom)
 
     # Add UR3 and Move to starting position
-    ur3.base = SE3(1.45, 4, 0.585).A 
+    ur3.base = SE3(1.5, 4.0, 0.585).A 
     ur3.add_to_env(env)
 
     # Add GP4 and Move to starting position
@@ -40,13 +41,13 @@ def initialise():
     # Add centrifuge base and move to starting position
     cenBaseFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/CentrifugeBottom.dae'
     cenBase = Mesh(filename = cenBaseFile)
-    cenBase.T = SE3(1.45, 4.4, 0.7).A #0.6
+    cenBase.T = SE3(1.8, 4.2, 0.7).A #1.1, 4.2
     env.add(cenBase)
 
     # Add centrifuge top and move to starting position
     cenTopFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/CentrifugeTop.dae'
     cenTop = Mesh(filename = cenTopFile)
-    cenTop.T = SE3(1.447, 4.538, 0.7372).A @ trotx(-4*pi/5) #0.46
+    cenTop.T = cenBase.T @ SE3(-0.003, 0.138, 0.0372).A @ trotx(-4*pi/5) #0.46
     env.add(cenTop)
 
     # Add test tube Rack and Move to starting position
@@ -74,6 +75,14 @@ def initialise():
     topxOff = SE3(0.15, 0, 0).A
     topyOff = SE3(0, 0.15, 0).A
 
+    grippers = gripperObj(env)
+    env.add(grippers.gripFing1)
+    env.add(grippers.gripFing2)
+    gripperOffset = troty(-pi/2) @ trotx(pi/2)
+    grippers.gripFing1.base = ur3.fkine(ur3.q).A @ gripperOffset
+    grippers.gripFing2.base = ur3.fkine(ur3.q).A @ gripperOffset
+
+
     top1 = topperPython(topperFile, topPlanePoint, SE3(0, 0, 0), env)
     top2 = topperPython(topperFile, topPlanePoint @ topyOff, SE3(0, 0, 0), env)
     top3 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff, SE3(0, 0, 0), env)
@@ -87,24 +96,21 @@ def initialise():
 
     # Add Test Tubes to Rack
     testTubeFileName = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/TestTube.dae'
-    tt1 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.075, 3.548, 0.65).A, SE3(0, 0, 0), env)
-    tt2 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.029, 3.548, 0.65).A, SE3(0, 0, 0), env)
-    tt3 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.018, 3.548, 0.65).A, SE3(0, 0, 0), env)
-    tt4 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.063, 3.548, 0.65).A, SE3(0, 0, 0), env)
-    tt5 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.109, 3.548, 0.65).A, SE3(0, 0, 0), env)
+    tt1 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.075, 3.548, 0.65).A, SE3(1.8, 4.13, 0.68).A, env)
+    tt2 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.029, 3.548, 0.65).A, SE3(1.735, 4.175, 0.68).A, env)
+    tt3 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.018, 3.548, 0.65).A, SE3(1.866, 4.172, 0.68).A, env)
+    tt4 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.063, 3.548, 0.65).A, SE3(1.85, 4.256, 0.68).A, env)
+    tt5 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.109, 3.548, 0.65).A, SE3(1.75, 4.256, 0.68).A, env)
     
     ttList = [tt1, tt2, tt3, tt4, tt5]
 
-    botSystem = newRobotSystem(ur3, gp4, ttList, topList, env, [topperEE], [topperEEOffset])
+    botSystem = newRobotSystem(ur3, gp4, ttList, topList, env, [grippers, topperEE, None], [gripperOffset, topperEEOffset, None])
 
     botSystem.simulation()
-    
+
     #rmrc(gp4, topperOffset, eeOffset)
 
 def rmrc(robot: 'newGP4', offsetTop: 'SE3', eeOffset: 'SE3'):
-    """
-    I don't know why but this isn't working for me but I kept it cause it's got the math we need for RMRC
-    """
     # 1.1) Set parameters for the simulation                 
     t = 10                                     # Total time (s)
     delta_t = 0.02                             # Control frequency
@@ -183,10 +189,17 @@ if __name__ == "__main__":
     env = swift.Swift() 
     env.launch(realtime=True)
 
-    ur3 = UR3()
+    ur3 = UR3e()
     gp4 = newGP4()
 
     initialise()
+
+    #q_matrix = rtb.jtraj(gp4.q, (pi/2,pi/4,pi/8,pi/16,pi/32,pi/64), 100).q
+
+    #for i in range(100):
+        #gp4.q = q_matrix[i]
+        #robot.q = q_matrix[i]
+        #env.step(0.05)
 
     env.step(1)
 
