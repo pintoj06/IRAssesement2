@@ -11,6 +11,9 @@ from ir_support.robots.DHRobot3D import DHRobot3D
 import time
 import os
 
+from roboticstoolbox import DHRobot, DHLink
+from ir_support import CylindricalDHRobotPlot
+
 # Useful variables
 from math import pi
 
@@ -41,6 +44,7 @@ class UR3e(DHRobot3D):
         """
         # DH links
         links = self._create_DH()
+        self.dhRobot = self.createDHRobotForCollision()
 
         # Names of the robot link files in the directory
         link3D_names = dict(link0 = 'base_ur3',
@@ -102,6 +106,26 @@ class UR3e(DHRobot3D):
         time.sleep(3)
         # env.hold()
 
+    def createDHRobotForCollision(self):
+        a = [0, -0.24365, -0.21325, 0, 0, 0]
+        d = [0.1519, 0, 0, 0.11235, 0.08535, 0.0819]
+        alpha = [pi/2, 0, 0, pi/2, -pi/2, 0]
+        qlim = [[-pi, 2*pi] for _ in range(6)] 
+        qlim[1] = [-pi, 0] #Changled limiting angle of second joint so robot does not spin through ground
+        
+        link1 = DHLink(d=d[0], a=a[0], alpha=alpha[0], qlim=qlim[0])
+        link2 = DHLink(d=d[1], a=a[1], alpha=alpha[1], qlim=qlim[1])
+        link3 = DHLink(d=d[2], a=a[2], alpha=alpha[2], qlim=qlim[2])
+        link4 = DHLink(d=d[3], a=a[3], alpha=alpha[3], qlim=qlim[3])
+        link5 = DHLink(d=d[4], a=a[4], alpha=alpha[4], qlim=qlim[4])
+        link6 = DHLink(d=d[5], a=a[5], alpha=alpha[5], qlim=qlim[5])
+
+        robot = DHRobot([link1, link2, link3, link4, link5, link6], name='gp4_DH')
+
+        cyl_viz = CylindricalDHRobotPlot(robot, cylinder_radius=0.000005, color="#3478f604")
+        robot = cyl_viz.create_cylinders()
+
+        return robot
 # ---------------------------------------------------------------------------------------#
 if __name__ == "__main__":
     r = UR3e()
