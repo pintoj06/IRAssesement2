@@ -13,6 +13,9 @@ import spatialmath.base as spb
 from spatialmath import SE3
 import swift
 
+from roboticstoolbox import DHRobot, DHLink
+from ir_support import CylindricalDHRobotPlot
+
 from ir_support.robots.DHRobot3D import DHRobot3D  # adjust if your path differs
 
 
@@ -39,6 +42,7 @@ class newGP4(DHRobot3D):
     def __init__(self):
         # --- DH links (see _create_DH for details) ---
         links = self._create_DH()
+        self.dhRobot = self.createDHRobotForCollision()
 
         # --- Mesh names for each link (stripped of package paths, just basenames) ---
         # Make sure these filenames match the .dae/.stl files you've already renamed.
@@ -134,3 +138,31 @@ class newGP4(DHRobot3D):
             self.q = qk
             env.step(0.02)
         time.sleep(2)
+
+    def createDHRobotForCollision(self):
+        a =   [0.0, 0.260, 0.015, 0.0, 0.0, 0.0]
+        d =   [0.330, 0.0, 0.0, 0.290, 0.0, 0.072]
+        alpha = [pi/2, 0,  pi/2, -pi/2,  pi/2, 0.0]
+
+        # Joint limits from your Xacro (converted to radians); J6 unlimited-ish is clamped to ±(455°)
+        qlim = [
+            [(-170) * pi / 180, (170) * pi / 180],
+            [(-110) * pi / 180, (130) * pi / 180],
+            [(-65)  * pi / 180, (200) * pi / 180],
+            [(-200) * pi / 180, (200) * pi / 180],
+            [(-123) * pi / 180, (123) * pi / 180],
+            [(-455) * pi / 180, (455) * pi / 180],
+        ]
+        link1 = DHLink(d=d[0], a=a[0], alpha=alpha[0], qlim=qlim[0])
+        link2 = DHLink(d=d[1], a=a[1], alpha=alpha[1], qlim=qlim[1])
+        link3 = DHLink(d=d[2], a=a[2], alpha=alpha[2], qlim=qlim[2])
+        link4 = DHLink(d=d[3], a=a[3], alpha=alpha[3], qlim=qlim[3])
+        link5 = DHLink(d=d[4], a=a[4], alpha=alpha[4], qlim=qlim[4])
+        link6 = DHLink(d=d[5], a=a[5], alpha=alpha[5], qlim=qlim[5])
+
+        robot = DHRobot([link1, link2, link3, link4, link5, link6], name='gp4_DH')
+
+        cyl_viz = CylindricalDHRobotPlot(robot, cylinder_radius=0.000005, color="#3478f604")
+        robot = cyl_viz.create_cylinders()
+
+        return robot
