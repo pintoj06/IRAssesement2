@@ -14,11 +14,12 @@ from math import pi
 from toppers import topperPython
 from customUr3e import UR3e
 from collisionDet import collisions
+from IGUS_testcode import ReBeL
 import numpy as np
 import random
-
+from spatialgeometry import Mesh, Sphere
 class newRobotSystem:
-    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = []):
+    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL' , ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = []):
         self.ur3 = ur3
         self.ttList = ttList
         self.topList = topList
@@ -35,17 +36,24 @@ class newRobotSystem:
         self.gp4EE = ee[1]
         self.gp4RMRCoffset = SE3(0, 0, 0.3).A
 
+        self.rebel = rebel
+      # self.gp4Offset = SE3(0.07, 0, 0).A IDK WHAT THIS IS FOR
+        self.rebeleetoolOffset = eeToolOffset[2]
+        self.rebelEE = ee[2]
+      #  self.rebelRMRCoffset = SE3(0, 0, 0.3).A IDK WHAT THIS IS FOR
+        
+
+
         self.steps = 150
-        self.collisionDet = collisions(self.ur3, self.gp4, self.env)
+        self.collisionDet = collisions( self.ur3, self.gp4, self.rebel, self.env)
         self.useRRT = False
+        self.running = True
+
 
 
     def simulation(self):
-        #self.rmrc(self.gp4, self.gp4eeToolOffset,  self.gp4Offset)
-        #self.testRRTPastObj()
-
-
-        #self.fillTubes()
+        
+        self.fillTubes()
         self.moveToppers()
         self.pickupToppers()
         self.moveToCentrifuge()
@@ -55,7 +63,30 @@ class newRobotSystem:
         #self.jtrajMoveur3([-pi, 0, pi/2, 0, 0, 0])
 
         #self.collectTubes()
-    
+    def fillTubes(self):
+        #test sphere
+        
+        '''
+          Jayden needs to fix, not sure why jtraj not working
+        '''
+
+        self.env.step(0.05)
+        if self.useRRT:
+            pass #RRT NOT SET UP FOR THIS YET
+        else:
+            #for i in range(len(self.ttList)):
+            q_goal= self.rebel.ik_LM(SE3(.7, 2.9, 0.985).A @ troty(-pi/2), q0 = [3.027, 1.101, 0.087, 0.105, -1.264, 0.0])[0]
+            
+            #array([ 1.40546703, -0.63328708,  1.26858756,  0.72299413,  0.48662232,  0.27487697])
+       
+            #[1.4054670345631477, -0.6332870756755693, 1.2685875625796734, 0.7229941335792924, 0.48662231859172334, 0.2748769731121059]
+            self.jtrajMoverebel(q_goal) #location of specimen
+       #         self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffset @ trotx(pi))[0], moveObj=[self.ttList[i]], objOffset=[self.ttList[i].offset])
+        
+        #self.jtrajMoveur3([0, -pi/2, pi/2, 0, 0, 0])
+        #self.jtrajMoveur3([-pi, 0, pi/2, 0, 0, 0])
+
+
     def moveToppers(self):
         if self.useRRT:
             for i in range(len(self.ttList)):
@@ -112,6 +143,21 @@ class newRobotSystem:
             if moveObj is not None:
                 for y in range(len(moveObj)):
                     moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y]
+            self.env.step(0.015)
+
+    def jtrajMoverebel(self, endq, moveObj:'list'=None, objOffset:'list'=None):
+        #based off gp4 one but for rebel
+        qMatrix = rtb.jtraj(self.rebel.q, endq, self.steps).q
+        for x in range(self.steps):
+            self.rebel.q = qMatrix[x]
+            self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) #@ self.gp4eeToolOffset   ADD OFFSET IF NEEDED
+            if self.collisionDet.collisionCheck(self.rebel):
+                print("COLLISION DETECTED")
+                while True:
+                    pass
+            if moveObj is not None:
+                for y in range(len(moveObj)):
+                    moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y]
             self.env.step(0.015)
 
     def jtrajMoveur3(self, endq, moveObj:'list'=None, objOffset:'list'=None):
