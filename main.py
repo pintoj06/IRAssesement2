@@ -9,7 +9,7 @@ from spatialmath.base import *
 from math import pi
 from customUr3e import UR3e
 import swift
-from spatialgeometry import Mesh
+from spatialgeometry import Mesh, Sphere
 import time
 from testTubes import testTubePython
 from toppers import topperPython
@@ -21,15 +21,25 @@ from gp4 import newGP4
 import numpy as np
 from robotSystem import newRobotSystem
 from Grippers import gripperObj
-
-
+from IGUS_testcode import ReBeL
+from tkinterGUI import JointControlUI
 # ---------------------------------------------------------------------------------------#
 def initialise():
     # Add room
-    envFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/CentrifugeEnvironment1.dae'
+    #A2-GithunTotalCode-8-10-25\IRAssesement2-main\enivornmentFiles\CentrifugeEnvironment.dae
+    envFile = r'enivornmentFiles\CentrifugeEnvironment.dae'
     envRoom = Mesh(filename = envFile)
     env.add(envRoom)
 
+
+    #add a ball for testing, remove in final
+    pose = SE3(1.0, 3.1, 0.885)
+        
+    # Create a blue sphere with 3 cm radius, delete in final
+    sphere = Sphere(radius=0.03, pose=pose, color=[0.0, 0.2, 1.0, 1.0])
+    env.add(sphere)
+    
+    
     # Add UR3 and Move to starting position
     ur3.base = SE3(1.5, 4.0, 0.585).A 
     ur3.add_to_env(env)
@@ -44,23 +54,44 @@ def initialise():
     gp4.dhRobot.base = SE3(1.5, 3.1, 0.585).A @ trotz(pi/2)
     gp4.dhRobot.q = gp4.q
 
+    # Add REBEL and Move to starting Position
+    rebel.base = SE3(1.0, 3.5, 0.585).A @ trotz(pi/2)
+    rebel.add_to_env(env)
+    env.add(rebel.dhRobot)
+    rebel.dhRobot.base = SE3(1.0, 3.5, 0.585).A @ trotz(pi/2)
+    rebel.dhRobot.q = rebel.q
+    
+
     # Add centrifuge base and move to starting position
-    cenBaseFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/CentrifugeBottom.dae'
+    cenBaseFile = r'enivornmentFiles\CentrifugeBottom.dae'
     cenBase = Mesh(filename = cenBaseFile)
     cenBase.T = SE3(1.8, 4.2, 0.7).A #1.1, 4.2
     env.add(cenBase)
 
     # Add centrifuge top and move to starting position
-    cenTopFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/CentrifugeTop.dae'
+    cenTopFile = r'enivornmentFiles\CentrifugeTop.dae'
     cenTop = Mesh(filename = cenTopFile)
     cenTop.T = cenBase.T @ SE3(-0.003, 0.138, 0.0372).A @ trotx(-4*pi/5) #0.46
     env.add(cenTop)
 
     # Add test tube Rack and Move to starting position
-    testTubeRackFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/TesttubeRack.dae'
+    testTubeRackFile = r'enivornmentFiles\TesttubeRack.dae'
     testTubeRack = Mesh(filename = testTubeRackFile)
     testTubeRack.T = SE3(1.51, 3.55, 0.585).A @ trotz(pi/2) #1.36
     env.add(testTubeRack)
+
+    # Add specimens to extract liquid from 
+    specimen1File = r'enivornmentFiles\Specimen1.dae'
+    specimen1 = Mesh(filename = specimen1File)
+    specimen1.T = SE3(1.0, 3.1, 0.685).A @ trotz(pi/2) #1.36
+    env.add(specimen1)
+
+    specimen2File = r'enivornmentFiles\Specimen2.dae'
+    specimen2 = Mesh(filename = specimen2File)
+    specimen2.T = SE3(1.0, 3.9, 0.685).A @ trotz(pi/2) #1.36
+    env.add(specimen2)
+
+
 
     """
     dropperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/dropper.dae'
@@ -70,13 +101,13 @@ def initialise():
     env.add(dropper)
     """
 
-    topperEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/topperEE.dae'
+    topperEEFile = r'enivornmentFiles\topperEE.dae'
     topperEE = Mesh(filename = topperEEFile)
     topperEEOffset = trotx(pi) @ SE3(-0.07, 0, 0).A
     topperEE.T = gp4.fkine(gp4.q).A @ topperEEOffset
     env.add(topperEE)
 
-    topperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/Topper.dae'
+    topperFile = r'enivornmentFiles\Topper.dae'
     topPlanePoint = SE3(1.7, 3, 0.6).A
     topxOff = SE3(0.15, 0, 0).A
     topyOff = SE3(0, 0.15, 0).A
@@ -87,6 +118,14 @@ def initialise():
     gripperOffset = troty(-pi/2) @ trotx(pi/2)
     grippers.gripFing1.base = ur3.fkine(ur3.q).A @ gripperOffset
     grippers.gripFing2.base = ur3.fkine(ur3.q).A @ gripperOffset
+
+
+    #Rebel gripper 
+    pippetteEEFile = r'pippette.dae'
+    pipetteEE = Mesh(filename = pippetteEEFile)
+    pipetteEEOffset = SE3(0, 0, 0).A
+    pipetteEE.T = rebel.fkine(rebel.q).A @ troty(pi/2)  @ pipetteEEOffset 
+    env.add(pipetteEE)
 
 
     top1 = topperPython(topperFile, topPlanePoint, SE3(0, 0, 0), env)
@@ -101,7 +140,7 @@ def initialise():
     env.set_camera_pose(position=camera_position, look_at = ur3.base.A[:3, 3])
 
     # Add Test Tubes to Rack
-    testTubeFileName = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/TestTube.dae'
+    testTubeFileName = r'enivornmentFiles\TestTube.dae'
     tt1 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.075, 3.548, 0.65).A, SE3(1.8, 4.13, 0.68).A, env)
     tt2 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.029, 3.548, 0.65).A, SE3(1.735, 4.175, 0.68).A, env)
     tt3 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.018, 3.548, 0.65).A, SE3(1.866, 4.172, 0.68).A, env)
@@ -110,9 +149,10 @@ def initialise():
     
     ttList = [tt1, tt2, tt3, tt4, tt5]
 
-    botSystem = newRobotSystem(ur3, gp4, ttList, topList, env, [grippers, topperEE, None], [gripperOffset, topperEEOffset, None])
+    botSystem = newRobotSystem(ur3, gp4, rebel, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset])
+    GUI = JointControlUI(botSystem)
 
-    botSystem.simulation()
+#   botSystem.simulation()
 
     #rmrc(gp4, topperEEOffset, SE3(0.07, 0, 0).A)
 
@@ -124,16 +164,11 @@ if __name__ == "__main__":
     env.launch(realtime=True)
 
     ur3 = UR3e()
+    rebel = ReBeL()
     gp4 = newGP4()
 
     initialise()
 
-    #q_matrix = rtb.jtraj(gp4.q, (pi/2,pi/4,pi/8,pi/16,pi/32,pi/64), 100).q
-
-    #for i in range(100):
-        #gp4.q = q_matrix[i]
-        #robot.q = q_matrix[i]
-        #env.step(0.05)
 
     env.step(1)
 
