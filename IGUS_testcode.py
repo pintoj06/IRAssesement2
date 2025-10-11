@@ -1,5 +1,3 @@
-
-
 import swift
 import roboticstoolbox as rtb
 import spatialmath.base as spb
@@ -12,6 +10,7 @@ import numpy as np
 from math import pi
 from roboticstoolbox import DHRobot, DHLink
 from spatialgeometry import Mesh, Sphere
+from spatialmath.base import *
 # -----------------------------------------------------------------------------------#
 class ReBeL(DHRobot3D):
     def __init__(self):
@@ -59,7 +58,8 @@ class ReBeL(DHRobot3D):
             links,
             link3D_names,
             name='igus ReBeL 6DoF (MDH)',
-            link3d_dir= r"C:\Users\jayde\OneDrive - UTS\2025\Sem2\Industrial Robotics\VS Code\A2",
+            #link3d_dir= r"C:\Users\jayde\OneDrive - UTS\2025\Sem2\Industrial Robotics\VS Code\A2", # FOR JAYDEN
+            link3d_dir= os.path.abspath(os.path.dirname(__file__)), # FOR HARRY
             qtest=qtest,
             qtest_transforms=qtest_transforms
         )
@@ -105,12 +105,12 @@ class ReBeL(DHRobot3D):
         # Joint limits 
         deg = np.pi/180
         qlim = [
-            [-179*deg,  179*deg],   # J1
-            [ -80*deg,  140*deg],   # J2
-            [ -80*deg,  140*deg],   # J3
-            [-179*deg,  179*deg],   # J4
-            [ -90*deg,   90*deg],   # J5
-            [-179*deg,  179*deg],   # J6
+            [ -2*pi,  2*pi],   # J1
+            [ -2*pi,  2*pi],   # J2
+            [ -2*pi,  2*pi],   # J3
+            [ -2*pi,  2*pi],   # J4
+            [ -2*pi,  2*pi],   # J5
+            [ -2*pi,  2*pi],   # J6
         ]
 
         # Build RevoluteMDH links (MDH!)
@@ -131,12 +131,12 @@ class ReBeL(DHRobot3D):
         d     = [0.252, 0, 0, 0.297, 0, 0.126]
         deg = np.pi/180
         qlim = [
-            [-179*deg,  179*deg],   # J1
-            [ -80*deg,  140*deg],   # J2
-            [ -80*deg,  140*deg],   # J3
-            [-179*deg,  179*deg],   # J4
-            [ -90*deg,   90*deg],   # J5
-            [-179*deg,  179*deg],   # J6
+            [ -2*pi,  2*pi],   # J1
+            [ -2*pi,  2*pi],   # J2
+            [ -2*pi,  2*pi],   # J3
+            [ -2*pi,  2*pi],   # J4
+            [ -2*pi,  2*pi],   # J5
+            [ -2*pi,  2*pi],   # J6
         ]
 
         link1 = DHLink(d=d[0], a=a[0], alpha=alphas[0], qlim=qlim[0])
@@ -187,12 +187,12 @@ if __name__ == "__main__":
     d     = [0.252, 0, 0, 0.297, 0, 0.126]
     deg = np.pi/180
     qlim = [
-            [-179*deg,  179*deg],   # J1
-            [ -80*deg,  140*deg],   # J2
-            [ -80*deg,  140*deg],   # J3
-            [-179*deg,  179*deg],   # J4
-            [ -90*deg,   90*deg],   # J5
-            [-179*deg,  179*deg],   # J6
+            [ -2*pi,  2*pi],   # J1
+            [ -2*pi,  2*pi],   # J2
+            [ -2*pi,  2*pi],   # J3
+            [ -2*pi,  2*pi],   # J4
+            [ -2*pi,  2*pi],   # J5
+            [ -2*pi,  2*pi],   # J6
         ]
     
     env = swift.Swift()
@@ -222,7 +222,7 @@ if __name__ == "__main__":
  #   robot.base = SE3(0.5, 0, 0).A
 #    robot.q = [0, pi/2, pi/2,0,0,0]
     env.step(0.05)
-    pose = SE3(0.2, 0.2, 0.2) 
+    pose = SE3(0.2, 0.2, 0.2).A @ troty(pi/2) 
 
 # Create a blue sphere with 3 cm radius
     sphere = Sphere(radius=0.03, pose=pose, color=[0.0, 0.2, 1.0, 1.0])
@@ -230,7 +230,7 @@ if __name__ == "__main__":
 # Add to the environment
     env.add(sphere)
     
-    t_world = pose @ SE3.Rx(pi)  #ply tool offset
+    t_world = pose @ trotx(pi)  #ply tool offset
     
 
     sol = r.ik_LM(t_world)#add .A for orientation
