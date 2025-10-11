@@ -9,18 +9,20 @@ import numpy as np
 from roboticstoolbox import DHRobot, jtraj
 from typing import List
 from itertools import combinations
+from IGUS_testcode import ReBeL
 
 
 class collisions:
-    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', environment: 'swift'):
+    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL',  environment: 'swift'):
         self.env = environment
         self.ur3 = ur3
         self.gp4 = gp4
+        self.rebel = rebel
         self.table = collisionObj([1.17, 1.86, 0.55], [1.36, 3.69, 0.3], self.env) #0.3
-        self.centrifugeBase = collisionObj([0.24, 0.24, 0.14], [1.8, 4.2, 0.65], self.env)
+        self.centrifugeBase = collisionObj([0.24, 0.24, 0.14], [1.8, 4.2, 0.63], self.env)
         self.ttHolder = collisionObj([0.26, 0.08, 0.11], [1.49, 3.56, 0.64], self.env)
 
-        self.testRRt = collisionObj([0.08, 0.4, 0.6], [1.7, 3.56, 0.9], self.env)
+        self.testRRt = collisionObj([0.08, 0.3, 0.5], [1.84, 3.34, 0.8], self.env)
 
         self.collisionObjList = [self.table, self.centrifugeBase, self.ttHolder]
     
@@ -110,7 +112,6 @@ class collisions:
         return robot.fkine_all(q).A
     
         
-
     def fine_interpolation(self, q1, q2, max_step_radians = np.deg2rad(1))->np.ndarray:
         """
         Use results from Q2.6 to keep calling jtraj until all step sizes are
@@ -144,7 +145,7 @@ class collisionObj:
         self.centre = centre       # Python list containing XYZ centre of cuboid
         self.pose = transl(self.centre)       # Define the pose of the centre of the cuboid
         # Create prism/cuboid and set desired pose
-        self.collisionObj = Cuboid(scale=self.lwh, color=[0.0, 1.0, 0.0, 0.5])   # Set colour to green, but with some transparency to see through it (RGBA)
+        self.collisionObj = Cuboid(scale=self.lwh, color=[0.0, 1.0, 0.0, 0.00001])   # Set colour to green, but with some transparency to see through it (RGBA)
         self.collisionObj.T = self.pose
         self.env = environment
         self.env.add(self.collisionObj)
