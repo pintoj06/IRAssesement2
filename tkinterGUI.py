@@ -1,5 +1,10 @@
 import tkinter as tk
 from tkinter import ttk
+
+# Create the Tk app *first*
+_early_root = tk.Tk()
+_early_root.withdraw()  # hide until your UI class sets it up
+
 from robotSystem import newRobotSystem
 import math
 
@@ -28,10 +33,12 @@ from IGUS_testcode import ReBeL
 class JointControlUI:
     def __init__(self, botSystem: 'newRobotSystem'):
         # CONTAINS ALL ROBOT INFO 
-        self.robotSystem = botSystem 
-
+        self.robotSystem = botSystem
+        global _early_root
+        self.root = _early_root  # use the one we created early
+        self.root.deiconify()    # show it now
         # --- Main window ---
-        self.root = tk.Tk()
+
         self.root.title("Industrial Robotics Control")
         self.root.geometry("600x500")
         self.root.configure(bg="#0F1115")
@@ -151,5 +158,4 @@ class JointControlUI:
         return [float(var.get()) for var in self.slider_vars]
 
 # Run the UI
-if __name__ == "__main__":
-    JointControlUI()
+
