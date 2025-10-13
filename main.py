@@ -28,9 +28,11 @@ from SpecimenLiquid import specimenLiquid
 def initialise():
     # Add room
     #A2-GithunTotalCode-8-10-25\IRAssesement2-main\enivornmentFiles\CentrifugeEnvironment.dae
-    #envFile = r'enivornmentFiles\CentrifugeEnvironment.dae' # FOR JAYDEN
-    envFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeEnvironment.dae' # FOR HARRY
-    envRoom = Mesh(filename = envFile)
+
+    # 1) Create Environment
+    envFile = r'enivornmentFiles\CentrifugeEnvironment.dae' # FOR JAYDEN
+    #envFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeEnvironment.dae' # FOR HARRY
+    envRoom = Mesh(filename = envFile) 
     env.add(envRoom)
 
 
@@ -41,8 +43,9 @@ def initialise():
  #   sphere = Sphere(radius=0.03, pose=pose, color=[0.0, 0.2, 1.0, 1.0])
   #  env.add(sphere)
     
-    #specimenLiquidFile = r'enivornmentFiles\3DSPECIMENLIQUID.dae' # FOR JAYDEN
-    # HARRY TO ADD FILE PATH HERE
+    # 2) Add Specimen Liquid
+    specimenLiquidFile = r'enivornmentFiles\3DSPECIMENLIQUID.dae' # FOR JAYDEN
+    #specimenLiquidFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/3DSPECIMENLIQUID.dae' # FOR HARRY
     specimen1LiquidList = []
     for i in range (1, 6): #change to 6 for 6 specimens after testing
         s1 = specimenLiquid(specimenLiquidFile, SE3(1.0, 3.1, 0.685).A, env)
@@ -50,6 +53,7 @@ def initialise():
                                   
     # Add UR3 and Move to starting position
     ur3.base = SE3(1.5, 4.0, 0.585).A 
+    ur3.q = [pi,-pi/2,0,0,0,0]
     ur3.add_to_env(env)
     env.add(ur3.dhRobot)
     ur3.dhRobot.base = SE3(1.5, 4.0, 0.585).A 
@@ -57,6 +61,7 @@ def initialise():
 
     # Add GP4 and Move to starting position
     gp4.base = SE3(1.5, 3.1, 0.585).A @ trotz(pi/2)
+    gp4.q = [-pi, pi/2, 0, 0, 0, 0]
     gp4.add_to_env(env)
     env.add(gp4.dhRobot)
     gp4.dhRobot.base = SE3(1.5, 3.1, 0.585).A @ trotz(pi/2)
@@ -71,29 +76,29 @@ def initialise():
     
 
     # Add centrifuge base and move to starting position
-    #cenBaseFile = r'enivornmentFiles\CentrifugeBottom.dae'
-    cenBaseFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeBottom.dae' # FOR HARRY'
+    cenBaseFile = r'enivornmentFiles\CentrifugeBottom.dae'
+    #cenBaseFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeBottom.dae' # FOR HARRY'
     cenBase = Mesh(filename = cenBaseFile)
     cenBase.T = SE3(1.8, 4.2, 0.68).A #1.1, 4.2
     env.add(cenBase)
 
     # Add centrifuge top and move to starting position
-    #cenTopFile = r'enivornmentFiles\CentrifugeTop.dae' # FOR JAYDEN
-    cenTopFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeTop.dae' # FOR HARRY
+    cenTopFile = r'enivornmentFiles\CentrifugeTop.dae' # FOR JAYDEN
+    #cenTopFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeTop.dae' # FOR HARRY
     cenTop = Mesh(filename = cenTopFile)
     cenTop.T = cenBase.T @ SE3(-0.003, 0.138, 0.0372).A @ trotx(-4*pi/5) #0.46
     env.add(cenTop)
 
     # Add test tube Rack and Move to starting position
-    #testTubeRackFile = r'enivornmentFiles\TesttubeRack.dae' # FOR JAYDEN
-    testTubeRackFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TesttubeRack.dae' # FOR HARRY
+    testTubeRackFile = r'enivornmentFiles\TesttubeRack.dae' # FOR JAYDEN
+    #testTubeRackFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TesttubeRack.dae' # FOR HARRY
     testTubeRack = Mesh(filename = testTubeRackFile)
     testTubeRack.T = SE3(1.51, 3.55, 0.585).A @ trotz(pi/2) #1.36
     env.add(testTubeRack)
 
-     # Add specimens to extract liquid from 
-    #specimen1File = r'enivornmentFiles\Specimen1.dae' # FOR JAYDEN
-    specimen1File = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/specimen1.dae' # FOR HARRY
+    # Add specimens to extract liquid from 
+    specimen1File = r'enivornmentFiles\Specimen1.dae' # FOR JAYDEN
+    #specimen1File = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/specimen1.dae' # FOR HARRY
     specimen1 = Mesh(filename = specimen1File)
     specimen1.T = SE3(1.0, 3.1, 0.65).A @ trotz(pi/2) #1.36
     env.add(specimen1)
@@ -104,26 +109,36 @@ def initialise():
     # specimen2.T = SE3(1.0, 3.9, 0.685).A @ trotz(pi/2) #1.36
     # env.add(specimen2)
 
-    #topperEEFile = r'enivornmentFiles\topperEE.dae' # FOR JAYDEN
-    topperEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/topperEE.dae' # FOR HARRY
+    # Add topper end effector and attach to the GP4
+    topperEEFile = r'enivornmentFiles\topperEE.dae' # FOR JAYDEN
+    #topperEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/topperEE.dae' # FOR HARRY
     topperEE = Mesh(filename = topperEEFile)
     topperEEOffset = trotx(pi) @ SE3(-0.07, 0, 0).A
     topperEE.T = gp4.fkine(gp4.q).A @ topperEEOffset
     env.add(topperEE)
 
-    #topperFile = r'enivornmentFiles\Topper.dae' # FOR JAYDEN
-    topperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/Topper.dae' # FOR HARRY
+    # Add the toppers to the environment
+    topperFile = r'enivornmentFiles\Topper.dae' # FOR JAYDEN
+    #topperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/Topper.dae' # FOR HARRY
     topPlanePoint = SE3(1.92, 2.9, 0.6).A
     topyOff = SE3(0, 0.05, 0).A
 
+    top1 = topperPython(topperFile, topPlanePoint, env)
+    top2 = topperPython(topperFile, topPlanePoint @ topyOff, env)
+    top3 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff, env)
+    top4 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff @ topyOff, env)
+    top5 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff @ topyOff @ topyOff, env)
+    
+    topList = [top1, top2, top3, top4, top5]
 
-
+    # Add grippers to the UR3
     grippers = gripperObj(env)
-    env.add(grippers.gripFing1)
-    env.add(grippers.gripFing2)
     gripperOffset = troty(-pi/2) @ trotx(pi/2)
     grippers.gripFing1.base = ur3.fkine(ur3.q).A @ gripperOffset
     grippers.gripFing2.base = ur3.fkine(ur3.q).A @ gripperOffset
+    env.add(grippers.gripFing1)
+    env.add(grippers.gripFing2)
+    
 
     #Rebel gripper 
     pippetteEEFile = r'enivornmentFiles\pippettev2.dae' # FOR JAYDEN
@@ -132,15 +147,6 @@ def initialise():
     pipetteEEOffset = SE3(-0.16243,0,0)
     pipetteEE.T = rebel.fkine(rebel.q).A @ troty(pi/2)  
     env.add(pipetteEE)
-
-
-    top1 = topperPython(topperFile, topPlanePoint, SE3(0, 0, 0), env)
-    top2 = topperPython(topperFile, topPlanePoint @ topyOff, SE3(0, 0, 0), env)
-    top3 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff, SE3(0, 0, 0), env)
-    top4 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff @ topyOff, SE3(0, 0, 0), env)
-    top5 = topperPython(topperFile, topPlanePoint @ topyOff @ topyOff @ topyOff @ topyOff, SE3(0, 0, 0), env)
-    
-    topList = [top1, top2, top3, top4, top5]
 
     camera_position = (SE3.Trans(4, 4, 1.4).A)[:3, 3]
     env.set_camera_pose(position=camera_position, look_at = ur3.base.A[:3, 3])
@@ -155,6 +161,8 @@ def initialise():
     tt5 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.109, 3.548, 0.65).A, SE3(1.75, 4.256, 0.68).A, env)
     
     ttList = [tt1, tt2, tt3, tt4, tt5]
+
+    env.step(0.1)
 
     botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList)
     GUI = JointControlUI(botSystem)
