@@ -57,7 +57,7 @@ class ReBeL(DHRobot3D):
         super().__init__(
             links,
             link3D_names,
-            name='igus ReBeL 6DoF (MDH)',
+            name='rebel',
             #link3d_dir= r"C:\Users\jayde\OneDrive - UTS\2025\Sem2\Industrial Robotics\VS Code\A2", # FOR JAYDEN
             link3d_dir= os.path.abspath(os.path.dirname(__file__)), # FOR HARRY
             qtest=qtest,
@@ -253,3 +253,4 @@ if __name__ == "__main__":
     
     
     
+
