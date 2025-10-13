@@ -18,8 +18,10 @@ from IGUS_testcode import ReBeL
 import numpy as np
 import random
 from spatialgeometry import Mesh, Sphere
+import time
+from SpecimenLiquid import specimenLiquid
 class newRobotSystem:
-    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = []):
+    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
         self.ur3 = ur3
         self.ttList = ttList
         self.topList = topList
@@ -46,8 +48,10 @@ class newRobotSystem:
 
         self.steps = 150
         self.collisionDet = collisions(self.ur3, self.gp4, self.rebel, self.env)
+        self.specimen1LiquidList = specimen1LiquidList
         self.useRRT = False
         self.running = True
+        self.boolSpecimen1 = True
 
 
 
@@ -76,13 +80,34 @@ class newRobotSystem:
         if self.useRRT:
             pass #RRT NOT SET UP FOR THIS YET
         else:
-            #for i in range(len(self.ttList)):
-            q_goal= self.rebel.ik_LM(SE3(.7, 2.9, 0.985).A @ troty(-pi/2), q0 = [3.027, 1.101, 0.087, 0.105, -1.264, 0.0])[0]
-            
-            #array([ 1.40546703, -0.63328708,  1.26858756,  0.72299413,  0.48662232,  0.27487697])
-       
-            #[1.4054670345631477, -0.6332870756755693, 1.2685875625796734, 0.7229941335792924, 0.48662231859172334, 0.2748769731121059]
-            self.jtrajMoverebel(q_goal) #location of specimen
+            for i in range(0, len(self.ttList)):
+                #Go to designated specimen 
+                if self.boolSpecimen1:
+                    specimenLocation = self.specimen1LiquidList[0].startPos
+                    q1 = specimenLocation @ SE3.Ry(pi/2).A
+                    q2 = q1 @ SE3(-0.17,0,0).A
+                    q_goal= self.rebel.ik_LM(q2, q0 = [3.027, 1.101, 0.087, 0.105, -1.264, 0.0])[0]#change to Specimen 1 location
+                else:
+                    pass 
+                    #q_goal= self.rebel.ik_LM(SE3(1.0, 3.1, 0.885) @ SE3(-0.16243,0,0),  q0 = [-1.303, 1.303, -0.410, 0.311, -0.583, 0.000])[0]# change to Specimen 2 location
+                self.jtrajMoverebel(q_goal) 
+                self.specimen1LiquidList[i].attachToRobot(self.rebel, self.env)
+               
+
+
+                #move to the indexed test tube
+                q_goal = self.rebel.ik_LM(self.ttList[i].startPos @ self.ttList[i].offset @ troty(-pi/2) @ SE3(-0.2,0,0).A, q0 = [-1.303, 1.303, -0.410, 0.311, -0.583, 0.000])[0]
+                self.jtrajMoverebel(q_goal, self.specimen1LiquidList[i])
+
+                self.rmrcrebel(-0.1, 3) #move down to fill tube
+
+                self.specimen1LiquidList[i].attachToTestTube(self.ttList[i].startPos, self.env)
+            self.jtrajMoverebel([0, pi/2, pi/2,0,0,pi/2])
+                                                                   
+
+                  #simulate time to fill the tube
+
+                #move to the 
        #         self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffset @ trotx(pi))[0], moveObj=[self.ttList[i]], objOffset=[self.ttList[i].offset])
         
         #self.jtrajMoveur3([0, -pi/2, pi/2, 0, 0, 0])
@@ -112,10 +137,10 @@ class newRobotSystem:
                 self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ self.ur3RMRCoffsetOne @ trotx(pi) @ trotz(pi/2))[0])
                 self.rmrcur3(-0.05, 2)
                 self.ur3EE.closeGripper()
-                self.rmrcur3(0.11, 2, [self.topList[i], self.ttList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset])
-                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0], moveObj = [self.topList[i], self.ttList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset])
+                self.rmrcur3(0.11, 2, [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset,SE3(0,0,0.05).A])
+                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0], moveObj = [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A] )
                 print(self.ur3.q)
-                self.rmrcur3(-0.1, 2, [self.topList[i], self.ttList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset])
+                self.rmrcur3(-0.1, 2, [self.topList[i], self.ttList[i],  self.specimen1LiquidList[i] ], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
                 self.ur3EE.openGripper()
             self.jtrajMoveur3([0,-pi/2,0,0,0,0])
     
@@ -124,9 +149,9 @@ class newRobotSystem:
                 self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0])
                 self.rmrcur3(-0.1, 2)
                 self.ur3EE.closeGripper()
-                self.rmrcur3(0.1, 2, [self.topList[i], self.ttList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset])
-                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ SE3(0,0,0.28).A @ trotx(pi) @ trotz(pi/2))[0], [self.topList[i], self.ttList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset])
-                self.rmrcur3(-0.085, 2, moveObj = [self.topList[i], self.ttList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset])
+                self.rmrcur3(0.1, 2, [self.topList[i], self.ttList[i], self.specimen1LiquidList[i] ], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
+                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ SE3(0,0,0.28).A @ trotx(pi) @ trotz(pi/2))[0], [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
+                self.rmrcur3(-0.085, 2, moveObj = [self.topList[i], self.ttList[i] , self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
                 self.ur3EE.openGripper()
             self.jtrajMoveur3([0,-pi/2,0,0,0,0])
 
@@ -173,7 +198,7 @@ class newRobotSystem:
                     moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y]
             self.env.step(0.01)
 
-    def jtrajMoverebel(self, endq, moveObj:'list'=None, objOffset:'list'=None):
+    def jtrajMoverebel(self, endq, moveObj: 'specimenLiquid' =None, objOffset:'list'=None):
         #based off gp4 one but for rebel
         qMatrix = rtb.jtraj(self.rebel.q, endq, self.steps).q
         for x in range(self.steps):
@@ -184,8 +209,11 @@ class newRobotSystem:
                 while True:
                     pass
             if moveObj is not None:
-                for y in range(len(moveObj)):
-                    moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y]
+                #move mesh1 and update other meshes accordingly
+                moveObj.mesh1.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2)
+                moveObj.updatePos()
+                    #moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y]
+                    
             self.env.step(0.015)
 
     def jtrajMoveur3(self, endq, moveObj:'list'=None, objOffset:'list'=None):
@@ -197,7 +225,13 @@ class newRobotSystem:
             self.collisionDet.collisionCheck(self.ur3)
             if moveObj is not None:
                 for y in range(len(moveObj)):
-                    moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                    try:
+                        moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                    except:
+                        print("couldnt access meshObj, presumed to be specimenLiquid")
+                        moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                        moveObj[y].updatePos()
+
             self.env.step(0.01)
 
     def primRRTgp4(self, endq, myObj:'list', moveObj:'list'=None, objOffset:'list'=None):
@@ -311,7 +345,13 @@ class newRobotSystem:
                             self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
                             if moveObj is not None:
                                 for y in range(len(moveObj)):
-                                    moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                                    try:
+                                        moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                                    except:
+                                        print("couldnt access meshObj, presumed to be specimenLiquid")
+                                        moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                                        moveObj[y].updatePos()
+
                             self.env.step(0.03)
                         # Reached goal without collision, so break out
                         break
@@ -407,7 +447,13 @@ class newRobotSystem:
             self.ur3.q = q
             if moveObj is not None:
                 for y in range(len(moveObj)):
-                    moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                    try:
+                        moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                    except:
+                        print("couldnt access meshObj, presumed to be specimenLiquid")
+                        moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
+                        moveObj[y].updatePos()
+                
             self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
             self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
             self.env.step(0.01)
@@ -478,9 +524,8 @@ class newRobotSystem:
             
             
             position_error[:,i] = x[:,i+1] - T[:3,3]                          # For plotting
-            angle_error[:,i] = delta_theta                                    # For plotting
+            angle_error[:,i] = delta_theta
 
-        # 1.5) Plot the results
         for q in q_matrix:
             self.gp4.q = q
             if moveObj is not None:
@@ -489,3 +534,81 @@ class newRobotSystem:
             self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset
             pos = self.gp4.fkine(q).A[:3,3] 
             self.env.step(0.01)
+
+
+    def rmrcrebel(self, movedown, time, moveObj:'list'=None, objOffset:'list'=None):
+    # 1.1) Set parameters for the simulation
+        t = time                                     # Total time (s)
+        delta_t = 0.02                               # Control frequency
+        steps = int(t/delta_t)                       # No. of steps for simulation
+        delta = 2*pi/steps                           # Small angle change
+        epsilon = 0.1                                # Threshold value for manipulability/Damped Least Squares
+        W = np.diag([1, 1, 1, 0.1, 1, 0.1])          # Weighting matrix for the velocity vector
+
+        # 1.2) Allocate array data
+        m = np.zeros([steps,1])                      # Array for Measure of Manipulability
+        q_matrix = np.zeros([steps,6])               # Array for joint angles
+        qdot = np.zeros([steps,6])                   # Array for joint velocities
+        theta = np.zeros([3,steps])                  # Array for roll-pitch-yaw angles
+        x = np.zeros([3,steps])                      # Array for x-y-z trajectory
+        position_error = np.zeros([3,steps])         # For plotting trajectory error
+        angle_error = np.zeros([3,steps])            # For plotting trajectory error
+
+        # 1.3) Set up trajectory, initial pose
+        s = trapezoidal(0,1,steps).q
+        currentPos = self.rebel.fkine(self.rebel.q).A    # Trapezoidal trajectory scalar
+        for i in range(steps):
+            x[0,i] = currentPos[0,3]             # Points in x
+            x[1,i] = currentPos[1,3]                     # Points in y
+            x[2,i] = currentPos[2,3] + movedown * s[i]   # Points in z
+            theta[0,i] = 0                               # Roll angle 
+            theta[1,i] = pi                              # Pitch angle
+            theta[2,i] = 0                               # Yaw angle
+        
+        T = transl(x[:,0]) @ rpy2tr(theta[0,0], theta[1,0], theta[2,0])  # First pose
+        q0 = self.rebel.q                                                # Initial guess
+        q_matrix[0,:] = self.rebel.ikine_LM(T, q0).q                     # First waypoint IK
+        qlim = np.transpose(self.rebel.qlim)
+
+        # 1.4) Track the trajectory with RMRC
+        for i in range(steps-1):
+            T = self.rebel.fkine(q_matrix[i,:]).A                        # FK at current state
+            delta_x = x[:,i+1] - T[:3,3]                                 # Position error
+            Rd = rpy2r(theta[0,i+1], theta[1,i+1], theta[2,i+1])         # Desired rotation
+            Ra = T[:3,:3]                                                # Actual rotation
+            Rdot = (1/delta_t)*(Rd - Ra)                                 # Rotation error rate
+            S = Rdot @ Ra.T                                              # Skew-symmetric
+            linear_velocity = (1/delta_t)*delta_x
+            angular_velocity = np.array([S[2,1], S[0,2], S[1,0]])        # From skew
+            delta_theta = tr2rpy(Rd @ Ra.T, order='xyz')                 # Angle error
+            xdot = W @ np.vstack((linear_velocity.reshape(3,1),
+                                angular_velocity.reshape(3,1)))        # EE velocity
+            J = self.rebel.jacob0(q_matrix[i,:])                         # Jacobian
+            m[i] = np.sqrt(np.linalg.det(J @ J.T))
+            if m[i] < epsilon:                                           # DLS damping
+                m_lambda = (1 - m[i]/epsilon) * 0.05
+            else:
+                m_lambda = 0
+            inv_j = np.linalg.inv(J.T @ J + m_lambda * np.eye(6)) @ J.T  # DLS inverse
+            qdot[i,:] = (inv_j @ xdot).T                                 # Joint velocities
+
+            for j in range(6):                                           # Joint limits
+                if q_matrix[i,j] + delta_t*qdot[i,j] < qlim[j,0]:
+                    qdot[i,j] = 0
+                elif q_matrix[i,j] + delta_t*qdot[i,j] > qlim[j,1]:
+                    qdot[i,j] = 0
+            
+            q_matrix[i+1,:] = q_matrix[i,:] + delta_t*qdot[i,:]          # Integrate
+
+            position_error[:,i] = x[:,i+1] - T[:3,3]                     # For plotting
+            angle_error[:,i] = delta_theta
+        # 1.5) Plot the results
+        for q in q_matrix:
+            self.rebel.q = q
+            if moveObj is not None:
+                for y in range(len(moveObj)):
+                    moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y]
+            self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @troty(pi/2) #@ self.gp4eeToolOffset
+            pos = self.rebel.fkine(q).A[:3,3] 
+            self.env.step(0.01)
+
