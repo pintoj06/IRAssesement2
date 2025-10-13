@@ -6,13 +6,13 @@ from math import pi
 
 class testTubePython:
     def __init__(self, filename, startPos, endPos, env: 'swift.Swift'):
-        self.startPos = startPos
-        self.endPos = endPos
-        self.file = filename
-        self.env = env
-        self.offset = SE3(0, 0, 0.1).A @ trotx(pi)
+        self.startPos = startPos # Start position of the test tube
+        self.endPos = endPos # Final position of the test tube
+        self.file = filename # File path of the test tube mesh
+        self.env = env # Environment used for the simulation
+        self.offset = SE3(0, 0, 0.2).A @ trotx(pi) # Offset to attach the test to the gripper
 
-        self.meshObj = Mesh(filename = self.file)
-        self.meshObj.T = self.startPos
+        self.meshObj = Mesh(filename = self.file) # Create the object
+        self.meshObj.T = self.startPos # Set the start position of the object
 
-        self.env.add(self.meshObj)
+        self.env.add(self.meshObj) # Add the object to the environment
