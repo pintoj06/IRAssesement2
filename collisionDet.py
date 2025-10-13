@@ -14,17 +14,17 @@ from IGUS_testcode import ReBeL
 
 class collisions:
     def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL',  environment: 'swift'):
-        self.env = environment
-        self.ur3 = ur3
-        self.gp4 = gp4
-        self.rebel = rebel
-        self.table = collisionObj([1.17, 1.86, 0.55], [1.36, 3.69, 0.3], self.env) #0.3
-        self.centrifugeBase = collisionObj([0.24, 0.24, 0.14], [1.8, 4.2, 0.63], self.env)
-        self.ttHolder = collisionObj([0.26, 0.08, 0.11], [1.49, 3.56, 0.64], self.env)
+        self.env = environment # Enviroment used for the simulation
+        self.ur3 = ur3 # UR3
+        self.gp4 = gp4 # GP4
+        self.rebel = rebel #ReBeL robot
+        self.table = collisionObj([1.17, 1.86, 0.55], [1.36, 3.69, 0.3], self.env) # Collision object for the table
+        self.centrifugeBase = collisionObj([0.24, 0.24, 0.14], [1.8, 4.2, 0.63], self.env) # Collision object for the centrifuge base
+        self.ttHolder = collisionObj([0.26, 0.08, 0.11], [1.49, 3.56, 0.64], self.env) # Collision object for the test tube rack
 
-        self.testRRt = collisionObj([0.08, 0.3, 0.5], [1.84, 3.34, 0.8], self.env)
+        self.testRRt = collisionObj([0.08, 0.33, 0.45], [1.84, 3.34, 0.75], self.env) # Collision object for the RRT testing object
 
-        self.collisionObjList = [self.table, self.centrifugeBase, self.ttHolder]
+        self.collisionObjList = [self.table, self.centrifugeBase, self.ttHolder] # List of all collision objects in the environment
     
     def collisionCheck(self, robot):
         collisions = []
@@ -133,21 +133,23 @@ class collisions:
         return q_matrix
 
     def testRRTgp4(self):
-        objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/TesttubeRack.dae'
+        # Create the collision object for the RRT testing
+        objRRT_file = '' # FOR JAYDEN TO FILL IN
+        objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CollisionObj.dae' # FOR HARRY
         objRRT = Mesh(filename = objRRT_file)
         self.env.add(objRRT)
-        objRRT.T = SE3(0,0,0).A
+        objRRT.T = SE3(1.87, 3.34, 0.75).A
 
 
 class collisionObj:
     def __init__(self, size: 'list', centre: 'SE3', environment: 'swift'):
-        self.lwh = size    # Python list containing the desired length (X), width (Y), height (Z) of the cuboid object
-        self.centre = centre       # Python list containing XYZ centre of cuboid
+        self.lwh = size # Python list containing the desired length (X), width (Y), height (Z) of the cuboid object
+        self.centre = centre  # Python list containing XYZ centre of cuboid
         self.pose = transl(self.centre)       # Define the pose of the centre of the cuboid
         # Create prism/cuboid and set desired pose
         self.collisionObj = Cuboid(scale=self.lwh, color=[0.0, 1.0, 0.0, 0.00001])   # Set colour to green, but with some transparency to see through it (RGBA)
-        self.collisionObj.T = self.pose
-        self.env = environment
-        self.env.add(self.collisionObj)
+        self.collisionObj.T = self.pose # Set the pose of the cuboid
+        self.env = environment # Enviorment used for the simulation
+        self.env.add(self.collisionObj) # add the collision cuboid to the environment
 
-        self.vertices, self.faces, self.face_normals = RectangularPrism(self.lwh[0], self.lwh[1], self.lwh[2], center=self.centre).get_data()
+        self.vertices, self.faces, self.face_normals = RectangularPrism(self.lwh[0], self.lwh[1], self.lwh[2], center=self.centre).get_data() # Get the vertecies, faces and face_normals of the collision object
