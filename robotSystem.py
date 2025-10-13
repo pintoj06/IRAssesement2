@@ -22,53 +22,72 @@ import time
 from SpecimenLiquid import specimenLiquid
 class newRobotSystem:
     def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
-        self.ur3 = ur3
-        self.ttList = ttList
-        self.topList = topList
-        self.env = env
-        self.cenTop = cenTop
+        self.ttList = ttList # List of test tubes
+        self.topList = topList # List of toppers
+        self.env = env # Environment
+        self.cenTop = cenTop # Centrifuge Lid
+ 
+        self.ur3 = ur3 # Ur3 Robot
+        self.ur3eeToolOffset = eeToolOffset[0] # Offset for the grippers from first element of list
+        self.ur3EE = ee[0] # UR3 Gripper from first element of gripper list
+        self.ur3RMRCoffsetOne = SE3(0, 0, 0.25).A # Offset for RMRC Movement 1
+        self.ur3RMRCoffsetTwo = SE3(0, 0, 0.28).A # Offset for RMRC Movement 1
 
-        self.ur3 = ur3
-        self.ur3eeToolOffset = eeToolOffset[0]
-        self.ur3EE = ee[0]
-        self.ur3RMRCoffsetOne = SE3(0, 0, 0.25).A
-        self.ur3RMRCoffsetTwo = SE3(0, 0, 0.28).A
+        self.gp4 = gp4 # GP4 Robot
+        self.gp4Offset = SE3(0.07, 0, 0).A # Offset for the gp4 to account for error
+        self.gp4eeToolOffset = eeToolOffset[1] # Offset for the end effector from second element of list
+        self.gp4EE = ee[1] # GP4 end effector from second element of gripper list
+        self.gp4RMRCoffset = SE3(0, 0, 0.3).A # Offset to account for the RMRC movement
 
-        self.gp4 = gp4
-        self.gp4Offset = SE3(0.07, 0, 0).A
-        self.gp4eeToolOffset = eeToolOffset[1]
-        self.gp4EE = ee[1]
-        self.gp4RMRCoffset = SE3(0, 0, 0.3).A
+        self.rebel = rebel # ReBel Robot
+        self.rebeleetoolOffset = eeToolOffset[2] # Offset for the end effector from third element of list
+        self.rebelEE = ee[2] # ReBel end effector from third element of gripper list
 
-        self.rebel = rebel
-      # self.gp4Offset = SE3(0.07, 0, 0).A IDK WHAT THIS IS FOR
-        self.rebeleetoolOffset = eeToolOffset[2]
-        self.rebelEE = ee[2]
-      #  self.rebelRMRCoffset = SE3(0, 0, 0.3).A IDK WHAT THIS IS FOR
-
-        self.steps = 150
-        self.collisionDet = collisions(self.ur3, self.gp4, self.rebel, self.env)
-        self.specimen1LiquidList = specimen1LiquidList
-        self.useRRT = False
+        self.steps = 150 # Nnumber of steps for jtraj
+        self.collisionDet = collisions(self.ur3, self.gp4, self.rebel, self.env) # Create collision detection objects
+        self.specimen1LiquidList = specimen1LiquidList # List of specimen liquids
+        self.useRRT = False # Boolean to declare the use of RRT in the movment functions
         self.running = True
         self.boolSpecimen1 = True
+
+        self.alarmhide = SE3(10, 10, 10).A # Position to hide the alarms (removing them caused an error)
+        self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
+
+        greenAlarmFile = '' # FOR JAYDEN TO ADD
+        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
+        self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
+        self.env.add(self.greenAlarm) # Add the green alarm to the environment
+
+        redAlarmFile = '' # FOR JAYDEN TO ADD
+        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
+        self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
+        self.env.add(self.redAlarm) # Add the red alarm to the environment
+
 
 
 
     def simulation(self):
-        
-        self.fillTubes()
-        self.moveToppers()
-        self.moveToCentrifuge()
-        self.closeCentrifugeLid()
-        self.openCentrifugeLid()
-        self.moveToRack()
+        self.greenAlarm.T = self.alarmhide # Hide green alarm
+        self.redAlarm.T = self.alarmshow # Show red alarm
+
+        #self.testRRTPastObj()
+
+        self.fillTubes() # Fill the test tubes with sample
+        self.moveToppers() # Move the toppers to the test tubes
+        self.moveToCentrifuge() # Move the test tubes to the centrifuge
+        self.closeCentrifugeLid() # Close the centrifuge
+        self.openCentrifugeLid() # Open the centrifuge
+        self.moveToRack() # Move the test tubes to the rack
         
         #FOR FORCED COLLISION TESTING:
         #self.jtrajMovegp4([-pi, -pi/2, pi/2, 0, 0, 0])
-        #self.jtrajMoveur3([-pi, 0, pi/2, 0, 0, 0])
 
-        #self.collectTubes()
+        self.greenAlarm.T = self.alarmshow # Show the green alarm
+        self.redAlarm.T = self.alarmhide # Hide the red alarm
+        self.env.step(0.1)
+
     def fillTubes(self):
         #test sphere
         
@@ -80,7 +99,7 @@ class newRobotSystem:
         if self.useRRT:
             pass #RRT NOT SET UP FOR THIS YET
         else:
-            for i in range(0, len(self.ttList)):
+            for i in range(0, len(self.ttList)): # Repeat for each test tube
                 #Go to designated specimen 
                 if self.boolSpecimen1:
                     specimenLocation = self.specimen1LiquidList[0].startPos
@@ -99,74 +118,70 @@ class newRobotSystem:
                 q_goal = self.rebel.ik_LM(self.ttList[i].startPos @ self.ttList[i].offset @ troty(-pi/2) @ SE3(-0.2,0,0).A, q0 = [-1.303, 1.303, -0.410, 0.311, -0.583, 0.000])[0]
                 self.jtrajMoverebel(q_goal, self.specimen1LiquidList[i])
 
-                self.rmrcrebel(-0.1, 3) #move down to fill tube
+                self.rmrcrebel(-0.2, 3, [self.specimen1LiquidList[i]], objOffset=[SE3(0,0,0).A]) #move down to fill tube
 
                 self.specimen1LiquidList[i].attachToTestTube(self.ttList[i].startPos, self.env)
             self.jtrajMoverebel([0, pi/2, pi/2,0,0,pi/2])
                                                                    
-
-                  #simulate time to fill the tube
-
-                #move to the 
-       #         self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffset @ trotx(pi))[0], moveObj=[self.ttList[i]], objOffset=[self.ttList[i].offset])
-        
-        #self.jtrajMoveur3([0, -pi/2, pi/2, 0, 0, 0])
-        #self.jtrajMoveur3([-pi, 0, pi/2, 0, 0, 0])
-
     def moveToppers(self):
+        """
+        This function moves the toppers from the plane (starting position) to the top of the test tubes where they are placed
+        It uses a mix of regular path planning using JTRAJ, however also accomidates RMRC for the vertical components and can use RRT when an obstacle is in the way
+        """
         if self.useRRT:
-            for i in range(len(self.ttList)):
-                self.primRRTgp4(self.gp4.ik_LM(self.topList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table])
-                self.rmrcgp4(-0.14, 3)
-                self.primRRTgp4(self.gp4.ik_LM(self.ttList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table], moveObj=[self.topList[i]], objOffset=[self.topList[i].offset])
-                self.rmrcgp4(-0.08, 3, moveObj=[self.topList[i]], objOffset=[self.topList[i].offset])
-            self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0])
-            self.jtrajMovegp4([-pi, pi/2, 0, 0, 0, 0])
-            self.gp4.q = ([-pi, pi/2, 0, 0, 0, 0])
+            self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Move to robot starting position
+            for i in range(len(self.ttList)): # Repeat the following for each test tube
+                self.primRRTgp4(self.gp4.ik_LM(self.topList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table]) # Move to topper using RRT
+                self.rmrcgp4(-0.14, 3) # Use RMRC to move directly down 0.14mm to pick up the topper 
+                self.primRRTgp4(self.gp4.ik_LM(self.ttList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table], moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) #Move directly to the test tube using RRT
+                self.rmrcgp4(-0.08, 3, moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) # Use RMRC to move the topper directly on top of the test tube
+            self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Move back to starting position
+            self.jtrajMovegp4([-pi, pi/2, 0, 0, 0, 0]) # Rotate 180 degrees to be out of the way of the UR3
         else:
-            for i in range(len(self.ttList)):
-                self.jtrajMovegp4(self.gp4.ik_LM(self.topList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0])
-                self.rmrcgp4(-0.14, 3)
-                self.jtrajMovegp4(self.gp4.ik_LM(self.ttList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], moveObj=[self.topList[i]], objOffset=[self.topList[i].offset])
-                self.rmrcgp4(-0.08, 3, moveObj=[self.topList[i]], objOffset=[self.topList[i].offset])
-            self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0])
-            self.jtrajMovegp4([-pi, pi/2, 0, 0, 0, 0])
+            self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Move to robot starting position
+            for i in range(len(self.ttList)): # Repeat the following for each test tube
+                self.jtrajMovegp4(self.gp4.ik_LM(self.topList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0]) # Move directly above the test topper
+                self.rmrcgp4(-0.14, 3) # Use RMRC to move directly down 0.14mm to pick up the topper 
+                self.jtrajMovegp4(self.gp4.ik_LM(self.ttList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) # Move directly above the test tube
+                self.rmrcgp4(-0.08, 3, moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) # Use RMRC to move the topper directly on top of the test tube
+            self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Move back to starting position
+            self.jtrajMovegp4([-pi, pi/2, 0, 0, 0, 0]) # Rotate 180 degrees to be out of the way of the UR3
 
     def moveToCentrifuge(self):
-            for i in range(len(self.ttList)):
-                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ self.ur3RMRCoffsetOne @ trotx(pi) @ trotz(pi/2))[0])
-                self.rmrcur3(-0.05, 2)
-                self.ur3EE.closeGripper()
-                self.rmrcur3(0.11, 2, [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset,SE3(0,0,0.05).A])
-                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0], moveObj = [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A] )
-                print(self.ur3.q)
-                self.rmrcur3(-0.1, 2, [self.topList[i], self.ttList[i],  self.specimen1LiquidList[i] ], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
-                self.ur3EE.openGripper()
-            self.jtrajMoveur3([0,-pi/2,0,0,0,0])
+            self.jtrajMoveur3([0,-pi/2,0,0,0,0]) # Move to robot starting position
+            for i in range(len(self.ttList)): # Repeat the following for each test tube
+                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ self.ur3RMRCoffsetOne @ trotx(pi) @ trotz(pi/2))[0]) # Move directly above the test tube
+                self.rmrcur3(-0.05, 2) # Use RMRC to move down to the exact position for pickup
+                self.ur3EE.closeGripper() # Close the gripper to pick up the test tube
+                self.rmrcur3(0.11, 2, [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset,SE3(0,0,0.13).A]) # Move the end effector directly up to remove the test tube from the holder
+                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0], moveObj = [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.13).A]) # Move directly to the test tubes final position located in the centrifuge # Move directly down to place the test tube in the centrifuge
+                self.rmrcur3(-0.1, 2, [self.topList[i], self.ttList[i],  self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.13).A]) # Move directly down to place the test tube in the centrifuge
+                self.ur3EE.openGripper() # Open the gripper to release the test tube
+            self.jtrajMoveur3([0,-pi/2,0,0,0,0]) # Move back to the starting position
     
     def moveToRack(self):
-            for i in range(len(self.ttList)):
-                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0])
-                self.rmrcur3(-0.1, 2)
-                self.ur3EE.closeGripper()
-                self.rmrcur3(0.1, 2, [self.topList[i], self.ttList[i], self.specimen1LiquidList[i] ], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
-                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ SE3(0,0,0.28).A @ trotx(pi) @ trotz(pi/2))[0], [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
-                self.rmrcur3(-0.085, 2, moveObj = [self.topList[i], self.ttList[i] , self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.05).A])
-                self.ur3EE.openGripper()
-            self.jtrajMoveur3([0,-pi/2,0,0,0,0])
+            for i in range(len(self.ttList)): # Repeat the following for each test tube
+                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].endPos @ self.ur3RMRCoffsetTwo @ trotx(pi))[0]) # Move diretly above the test tube
+                self.rmrcur3(-0.1, 2) # Move directly down to a safe distance above the test tube
+                self.ur3EE.closeGripper() # Close the gripper to pick u pthe test tube
+                self.rmrcur3(0.1, 2, [self.topList[i], self.ttList[i], self.specimen1LiquidList[i] ], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.13).A]) # Move the end effector directly up to remove the test tube from the centrifuge
+                self.jtrajMoveur3(self.ur3.ik_LM(self.ttList[i].startPos @ SE3(0,0,0.28).A @ trotx(pi) @ trotz(pi/2))[0], [self.topList[i], self.ttList[i], self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.13).A]) # Move the test tube directly above the rack
+                self.rmrcur3(-0.085, 2, moveObj = [self.topList[i], self.ttList[i] , self.specimen1LiquidList[i]], objOffset=[self.topList[i].ttoffset, self.ttList[i].offset, SE3(0,0,0.13).A]) # Move the end effector directly down to place the test tube in the rack
+                self.ur3EE.openGripper() # Open the gripper to release the test tube
+            self.jtrajMoveur3([0,-pi/2,0,0,0,0]) # Move back to the starting position
 
     def testRRTPastObj(self):
-        self.collisionDet.testRRTgp4()
-        self.useRRT = True
+        self.collisionDet.testRRTgp4() # Add the object that the robot needs to avoid to the environment
+        self.useRRT = True # Boolean used to declare the use of RRT in the movement functions
     
-    def closeCentrifugeLid(self):
-        for i in range(30):
+    def closeCentrifugeLid(self): # Closes the centrifuge lip by rotating it along the x direction
+        for i in range(30): 
             self.cenTop.T = self.cenTop.T @ trotx(2*pi/75)
             self.env.step(0.03)
         
         self.env.step(5)
-    
-    def openCentrifugeLid(self):
+
+    def openCentrifugeLid(self): # Opens the centrifuge lip by rotating it along the x direction
         for i in range(30):
             self.cenTop.T = self.cenTop.T @ trotx(-2*pi/75)
             self.env.step(0.03)
@@ -174,7 +189,6 @@ class newRobotSystem:
     def jtrajMovegp4(self, endq, moveObj:'list'=None, objOffset:'list'=None):
         """
         This is specifically for moving the gp4 using jtraj
-        It can be copied and used for the other robots just change the EE and offset
 
         moveObj is a list of the objects that need to be moved with at the end effector
         It's originally at None so the robot can still move without anything in the end effector
@@ -185,26 +199,25 @@ class newRobotSystem:
 
         """
 
-        qMatrix = rtb.jtraj(self.gp4.q, endq, self.steps).q
-        for x in range(self.steps):
-            self.gp4.q = qMatrix[x]
-            self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset
-            if self.collisionDet.collisionCheck(self.gp4):
-                print("COLLISION DETECTED")
-                while True:
+        qMatrix = rtb.jtraj(self.gp4.q, endq, self.steps).q # Create a matrix of joint positions to move the gp4 to the target position
+        for x in range(self.steps): # For each position in the matrix
+            self.gp4.q = qMatrix[x] # Update the current joint position of the gp4
+            self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset # Attach the tool to the end effector of the gp4
+            if self.collisionDet.collisionCheck(self.gp4): # Check for collisions at each step
+                print("COLLISION DETECTED") 
+                while True: # Catch the collision and stop the program from running
                     pass
-            if moveObj is not None:
-                for y in range(len(moveObj)):
-                    moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y]
-            self.env.step(0.01)
+            if moveObj is not None: # If there is an object passed in the function
+                for y in range(len(moveObj)): # For each object in the list
+                    moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y] # Attach the object to the end effector of the gp4 using the offset provided
+            self.env.step(0.01) # Update the environment at each step
 
     def jtrajMoverebel(self, endq, moveObj: 'specimenLiquid' =None, objOffset:'list'=None):
-        #based off gp4 one but for rebel
-        qMatrix = rtb.jtraj(self.rebel.q, endq, self.steps).q
-        for x in range(self.steps):
-            self.rebel.q = qMatrix[x]
-            self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) #@ self.gp4eeToolOffset   ADD OFFSET IF NEEDED
-            if self.collisionDet.collisionCheck(self.rebel):
+        qMatrix = rtb.jtraj(self.rebel.q, endq, self.steps).q # Create a matrix of joint postions for the ReBel to move to the target position
+        for x in range(self.steps): # Repeat for each postion in the matrix
+            self.rebel.q = qMatrix[x] # Update the current joint position of the ReBel
+            self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) # Attach the tool to the end effector of the ReBel
+            if self.collisionDet.collisionCheck(self.rebel): # Check for collsions at each step
                 print("COLLISION DETECTED")
                 while True:
                     pass
@@ -212,27 +225,28 @@ class newRobotSystem:
                 #move mesh1 and update other meshes accordingly
                 moveObj.mesh1.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2)
                 moveObj.updatePos()
-                    #moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y]
-                    
             self.env.step(0.015)
 
     def jtrajMoveur3(self, endq, moveObj:'list'=None, objOffset:'list'=None):
-        qMatrix = rtb.jtraj(self.ur3.q, endq, self.steps).q
-        for x in range(self.steps):
-            self.ur3.q = qMatrix[x]
-            self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
-            self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
-            self.collisionDet.collisionCheck(self.ur3)
-            if moveObj is not None:
-                for y in range(len(moveObj)):
-                    try:
-                        moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
-                    except:
+        qMatrix = rtb.jtraj(self.ur3.q, endq, self.steps).q # Create a matrix of joint positions to move the gp4 to the target position
+        for x in range(self.steps): # For each position in the matrix
+            self.ur3.q = qMatrix[x] # Update the current joint position of the ur3
+            self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the first gripper finger to the end effector of the ur3 with its offset
+            self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the second gripper finger to the end effector of the ur3 with its offset
+            if self.collisionDet.collisionCheck(self.ur3): # Check for collisions at each step
+                print("COLLISION DETECTED") 
+                while True: # Catch the collision and stop the program from running
+                    pass
+            if moveObj is not None: # If there is an object passed in the function
+                for y in range(len(moveObj)): # For each object in the list
+                    try: # Try moving the meshObj, if it can not be found presume it's a specimenLiquid
+                        moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y] # Attach the object to the end effector of the ur3
+                    except: 
                         print("couldnt access meshObj, presumed to be specimenLiquid")
-                        moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
-                        moveObj[y].updatePos()
+                        moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y] # Attach the specimineLiquid to the end effector of the ur3
+                        moveObj[y].updatePos() #Update the position of the specimenLiquid
 
-            self.env.step(0.01)
+            self.env.step(0.01) #Update the environment at each step
 
     def primRRTgp4(self, endq, myObj:'list', moveObj:'list'=None, objOffset:'list'=None):
         collisions = []
@@ -535,8 +549,7 @@ class newRobotSystem:
             pos = self.gp4.fkine(q).A[:3,3] 
             self.env.step(0.01)
 
-
-    def rmrcrebel(self, movedown, time, moveObj:'list'=None, objOffset:'list'=None):
+    def rmrcrebel(self, movedown, time, moveObj:'specimenLiquid'=None, objOffset:'list'=None):
     # 1.1) Set parameters for the simulation
         t = time                                     # Total time (s)
         delta_t = 0.02                               # Control frequency
@@ -562,7 +575,7 @@ class newRobotSystem:
             x[1,i] = currentPos[1,3]                     # Points in y
             x[2,i] = currentPos[2,3] + movedown * s[i]   # Points in z
             theta[0,i] = 0                               # Roll angle 
-            theta[1,i] = pi                              # Pitch angle
+            theta[1,i] = pi/2                              # Pitch angle
             theta[2,i] = 0                               # Yaw angle
         
         T = transl(x[:,0]) @ rpy2tr(theta[0,0], theta[1,0], theta[2,0])  # First pose
@@ -607,8 +620,12 @@ class newRobotSystem:
             self.rebel.q = q
             if moveObj is not None:
                 for y in range(len(moveObj)):
-                    moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y]
-            self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @troty(pi/2) #@ self.gp4eeToolOffset
+                    try: # Try moving the meshObj, if it can not be found presume it's a specimenLiquid
+                        moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y] # Attach the object to the end effector of the ur3
+                    except: 
+                        print("couldnt access meshObj, presumed to be specimenLiquid")
+                        moveObj[y].mesh1.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) # Attach the specimineLiquid to the end effector of the ur3
+                        moveObj[y].updatePos() #Update the position of the specimenLiquid
+            self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @troty(pi/2) #
             pos = self.rebel.fkine(q).A[:3,3] 
             self.env.step(0.01)
-
