@@ -53,14 +53,14 @@ class newRobotSystem:
         self.alarmhide = SE3(10, 10, 10).A # Position to hide the alarms (removing them caused an error)
         self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
 
-        greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
-        #greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        #greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
+        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
         self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
         self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
         self.env.add(self.greenAlarm) # Add the green alarm to the environment
 
-        redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
-        #redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        #redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
+        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
         self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
         self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
         self.env.add(self.redAlarm) # Add the red alarm to the environment
@@ -200,9 +200,7 @@ class newRobotSystem:
             self.gp4.q = qMatrix[x] # Update the current joint position of the gp4
             self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset # Attach the tool to the end effector of the gp4
             if self.collisionDet.collisionCheck(self.gp4): # Check for collisions at each step
-                print("COLLISION DETECTED") 
-                while True: # Catch the collision and stop the program from running
-                    pass
+                raise collisionDetected()
             if moveObj is not None: # If there is an object passed in the function
                 for y in range(len(moveObj)): # For each object in the list
                     moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y] # Attach the object to the end effector of the gp4 using the offset provided
@@ -214,9 +212,7 @@ class newRobotSystem:
             self.rebel.q = qMatrix[x] # Update the current joint position of the ReBel
             self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) # Attach the tool to the end effector of the ReBel
             if self.collisionDet.collisionCheck(self.rebel): # Check for collsions at each step
-                print("COLLISION DETECTED")
-                while True:
-                    pass
+                raise collisionDetected()
             if moveObj is not None:
                 #move mesh1 and update other meshes accordingly
                 moveObj.mesh1.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2)
@@ -230,9 +226,7 @@ class newRobotSystem:
             self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the first gripper finger to the end effector of the ur3 with its offset
             self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the second gripper finger to the end effector of the ur3 with its offset
             if self.collisionDet.collisionCheck(self.ur3): # Check for collisions at each step
-                print("COLLISION DETECTED") 
-                while True: # Catch the collision and stop the program from running
-                    pass
+                raise collisionDetected()
             if moveObj is not None: # If there is an object passed in the function
                 for y in range(len(moveObj)): # For each object in the list
                     try: # Try moving the meshObj, if it can not be found presume it's a specimenLiquid
@@ -629,3 +623,6 @@ class newRobotSystem:
         self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Default home position for the gp4
         self.jtrajMoveur3([0,-pi/2,0,0,0,0])
         self.jtrajMoverebel([0, pi/2, pi/2,0,0,pi/2])
+
+class collisionDetected(Exception):
+    pass
