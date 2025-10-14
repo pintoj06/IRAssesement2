@@ -20,8 +20,9 @@ import random
 from spatialgeometry import Mesh, Sphere
 import time
 from SpecimenLiquid import specimenLiquid
+import threading
 class newRobotSystem:
-    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
+    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, stop_event: 'threading.Event', ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
         self.ttList = ttList # List of test tubes
         self.topList = topList # List of toppers
         self.env = env # Environment
@@ -53,17 +54,19 @@ class newRobotSystem:
         self.alarmhide = SE3(10, 10, 10).A # Position to hide the alarms (removing them caused an error)
         self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
 
-        #greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
-        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
+        #greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
         self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
         self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
         self.env.add(self.greenAlarm) # Add the green alarm to the environment
 
-        #redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
-        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
+        #redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
         self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
         self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
         self.env.add(self.redAlarm) # Add the red alarm to the environment
+
+        self.stop_event = stop_event # Event to stop the simulation thread when emergency stop is pressed
 
 
 
@@ -173,12 +176,14 @@ class newRobotSystem:
     
     def closeCentrifugeLid(self): # Closes the centrifuge lip by rotating it along the x direction
         for i in range(30): 
+            self.checkGUIStop()
             self.cenTop.T = self.cenTop.T @ trotx(2*pi/75)
         
         self.env.step(5)
 
     def openCentrifugeLid(self): # Opens the centrifuge lip by rotating it along the x direction
         for i in range(30):
+            self.checkGUIStop()
             self.cenTop.T = self.cenTop.T @ trotx(-2*pi/75)
             self.env.step(0.03)
 
@@ -197,6 +202,7 @@ class newRobotSystem:
 
         qMatrix = rtb.jtraj(self.gp4.q, endq, self.steps).q # Create a matrix of joint positions to move the gp4 to the target position
         for x in range(self.steps): # For each position in the matrix
+            self.checkGUIStop()
             self.gp4.q = qMatrix[x] # Update the current joint position of the gp4
             self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset # Attach the tool to the end effector of the gp4
             if self.collisionDet.collisionCheck(self.gp4): # Check for collisions at each step
@@ -209,6 +215,7 @@ class newRobotSystem:
     def jtrajMoverebel(self, endq, moveObj: 'specimenLiquid' =None, objOffset:'list'=None):
         qMatrix = rtb.jtraj(self.rebel.q, endq, self.steps).q # Create a matrix of joint postions for the ReBel to move to the target position
         for x in range(self.steps): # Repeat for each postion in the matrix
+            self.checkGUIStop()
             self.rebel.q = qMatrix[x] # Update the current joint position of the ReBel
             self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) # Attach the tool to the end effector of the ReBel
             if self.collisionDet.collisionCheck(self.rebel): # Check for collsions at each step
@@ -222,6 +229,7 @@ class newRobotSystem:
     def jtrajMoveur3(self, endq, moveObj:'list'=None, objOffset:'list'=None):
         qMatrix = rtb.jtraj(self.ur3.q, endq, self.steps).q # Create a matrix of joint positions to move the gp4 to the target position
         for x in range(self.steps): # For each position in the matrix
+            self.checkGUIStop()
             self.ur3.q = qMatrix[x] # Update the current joint position of the ur3
             self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the first gripper finger to the end effector of the ur3 with its offset
             self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the second gripper finger to the end effector of the ur3 with its offset
@@ -247,6 +255,7 @@ class newRobotSystem:
         checked_till_waypoint = 0 # How many times the function tries to find a way past
         q_matrix = []
         while is_collision_check:
+            self.checkGUIStop()
             start_waypoint = checked_till_waypoint
             for i in range(start_waypoint, len(q_waypoints)-1):
                 q_matrix_join = self.collisionDet.interpolate_waypoints_radians([q_waypoints[i], q_waypoints[i+1]], np.deg2rad(10))
@@ -255,6 +264,7 @@ class newRobotSystem:
                     q_matrix.extend(q_matrix_join)
                     for q in q_matrix_join:
                         self.gp4.q = q
+                        self.checkGUIStop()
                         self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset
                         if moveObj is not None:
                             for y in range(len(moveObj)):
@@ -271,6 +281,7 @@ class newRobotSystem:
                     if not self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and not self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
                         q_matrix.extend(q_matrix_join)
                         for q in q_matrix_join:
+                            self.checkGUIStop()
                             self.gp4.q = q
                             self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset
                             if moveObj is not None:
@@ -292,6 +303,7 @@ class newRobotSystem:
                     q_rand = q_rand.tolist()  # Convert to a 3-element list
 
                     while self.collisionDet.is_collision(self.gp4.dhRobot, [q_rand], myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.gp4.dhRobot, [q_rand], myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+                        self.checkGUIStop()
                         q_rand = np.zeros(6)
                         q_rand[0] = random.uniform(-17/18, 17/18) * np.pi
                         q_rand[1] = random.uniform(-11/18, 13/18) * np.pi
@@ -306,7 +318,7 @@ class newRobotSystem:
 
         # Check again
         if self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
-            print('Collision detected!')
+            raise collisionDetected()
         else:
             print('No collision found')
         
@@ -319,6 +331,7 @@ class newRobotSystem:
         checked_till_waypoint = 0 # How many times the function tries to find a way past
         q_matrix = []
         while is_collision_check:
+            self.checkGUIStop()
             start_waypoint = checked_till_waypoint
             for i in range(start_waypoint, len(q_waypoints)-1):
                 q_matrix_join = self.collisionDet.interpolate_waypoints_radians([q_waypoints[i], q_waypoints[i+1]], np.deg2rad(10))
@@ -326,6 +339,7 @@ class newRobotSystem:
                 if not self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and not self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
                     q_matrix.extend(q_matrix_join)
                     for q in q_matrix_join:
+                        self.checkGUIStop()
                         self.ur3.q = q
                         self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
                         self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
@@ -344,6 +358,7 @@ class newRobotSystem:
                     if not self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and not self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
                         q_matrix.extend(q_matrix_join)
                         for q in q_matrix_join:
+                            self.checkGUIStop()
                             self.ur3.q = q
                             self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
                             self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset
@@ -365,6 +380,7 @@ class newRobotSystem:
                     q_rand = q_rand.tolist()[0]  # Convert to a 6-element list
 
                     while self.collisionDet.is_collision(self.ur3.dhRobot, [q_rand], myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.ur3.dhRobot, [q_rand], myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+                        self.checkGUIStop()
                         q_rand = (2 * np.random.rand(1, 6) - 1) * np.pi
                         q_rand = q_rand.tolist()[0]  # Convert to a 3-element list
                     q_waypoints = np.concatenate((q_waypoints[:i+1], [q_rand], q_waypoints[i+1:]), axis=0)
@@ -373,7 +389,7 @@ class newRobotSystem:
 
         # Check again
         if self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
-            print('Collision detected!')
+            raise collisionDetected()
         else:
             print('No collision found')
 
@@ -448,6 +464,7 @@ class newRobotSystem:
 
         # 1.5) Plot the results
         for q in q_matrix:
+            self.checkGUIStop()
             self.ur3.q = q
             if moveObj is not None:
                 for y in range(len(moveObj)):
@@ -531,6 +548,7 @@ class newRobotSystem:
             angle_error[:,i] = delta_theta
 
         for q in q_matrix:
+            self.checkGUIStop()
             self.gp4.q = q
             if moveObj is not None:
                 for y in range(len(moveObj)):
@@ -607,6 +625,7 @@ class newRobotSystem:
             angle_error[:,i] = delta_theta
         # 1.5) Plot the results
         for q in q_matrix:
+            self.checkGUIStop()
             self.rebel.q = q
             if moveObj is not None:
                 for y in range(len(moveObj)):
@@ -619,10 +638,20 @@ class newRobotSystem:
             self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @troty(pi/2) #
             pos = self.rebel.fkine(q).A[:3,3] 
             self.env.step(0.01)
+    
     def returnToHome(self):
         self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Default home position for the gp4
         self.jtrajMoveur3([0,-pi/2,0,0,0,0])
         self.jtrajMoverebel([0, pi/2, pi/2,0,0,pi/2])
+    
+    def checkGUIStop(self):
+        if self.stop_event.is_set():
+            print("E-STOP PRESSED, STOPPING SIMULATION")
+            raise StopRequested()
 
 class collisionDetected(Exception):
+    print("COLLISION DETECTED - STOPPING SIMULATION")
+    pass
+
+class StopRequested(Exception):
     pass
