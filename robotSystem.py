@@ -53,14 +53,14 @@ class newRobotSystem:
         self.alarmhide = SE3(10, 10, 10).A # Position to hide the alarms (removing them caused an error)
         self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
 
-        greenAlarmFile = '' # FOR JAYDEN TO ADD
-        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
+        #greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
         self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
         self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
         self.env.add(self.greenAlarm) # Add the green alarm to the environment
 
-        redAlarmFile = '' # FOR JAYDEN TO ADD
-        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
+        #redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
         self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
         self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
         self.env.add(self.redAlarm) # Add the red alarm to the environment
@@ -73,7 +73,7 @@ class newRobotSystem:
         self.redAlarm.T = self.alarmshow # Show red alarm
 
         #self.testRRTPastObj()
-
+        #self.returnToHome()
         self.fillTubes() # Fill the test tubes with sample
         self.moveToppers() # Move the toppers to the test tubes
         self.moveToCentrifuge() # Move the test tubes to the centrifuge
@@ -111,16 +111,13 @@ class newRobotSystem:
                     #q_goal= self.rebel.ik_LM(SE3(1.0, 3.1, 0.885) @ SE3(-0.16243,0,0),  q0 = [-1.303, 1.303, -0.410, 0.311, -0.583, 0.000])[0]# change to Specimen 2 location
                 self.jtrajMoverebel(q_goal) 
                 self.specimen1LiquidList[i].attachToRobot(self.rebel, self.env)
-               
-
-
                 #move to the indexed test tube
                 q_goal = self.rebel.ik_LM(self.ttList[i].startPos @ self.ttList[i].offset @ troty(-pi/2) @ SE3(-0.2,0,0).A, q0 = [-1.303, 1.303, -0.410, 0.311, -0.583, 0.000])[0]
                 self.jtrajMoverebel(q_goal, self.specimen1LiquidList[i])
 
                 self.rmrcrebel(-0.2, 3, [self.specimen1LiquidList[i]], objOffset=[SE3(0,0,0).A]) #move down to fill tube
-
                 self.specimen1LiquidList[i].attachToTestTube(self.ttList[i].startPos, self.env)
+                self.rmrcrebel(0.2, 3) #move up
             self.jtrajMoverebel([0, pi/2, pi/2,0,0,pi/2])
                                                                    
     def moveToppers(self):
@@ -177,7 +174,6 @@ class newRobotSystem:
     def closeCentrifugeLid(self): # Closes the centrifuge lip by rotating it along the x direction
         for i in range(30): 
             self.cenTop.T = self.cenTop.T @ trotx(2*pi/75)
-            self.env.step(0.03)
         
         self.env.step(5)
 
@@ -629,3 +625,7 @@ class newRobotSystem:
             self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @troty(pi/2) #
             pos = self.rebel.fkine(q).A[:3,3] 
             self.env.step(0.01)
+    def returnToHome(self):
+        self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Default home position for the gp4
+        self.jtrajMoveur3([0,-pi/2,0,0,0,0])
+        self.jtrajMoverebel([0, pi/2, pi/2,0,0,pi/2])
