@@ -23,7 +23,11 @@ from robotSystem import newRobotSystem
 from Grippers import gripperObj
 from IGUS_testcode import ReBeL
 from tkinterGUI import JointControlUI
-from SpecimenLiquid import specimenLiquid  
+from SpecimenLiquid import specimenLiquid 
+import threading
+
+stop_event = None
+
 # ---------------------------------------------------------------------------------------#
 def initialise():
     # Add room
@@ -164,8 +168,8 @@ def initialise():
 
     env.step(0.1)
 
-    botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList)
-    GUI = JointControlUI(botSystem)
+    botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, stop_event, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList)
+    GUI = JointControlUI(botSystem, stop_event)
 
     #botSystem.simulation()
 
@@ -179,6 +183,8 @@ if __name__ == "__main__":
     ur3 = UR3e()
     rebel = ReBeL()
     gp4 = newGP4()
+
+    stop_event = threading.Event()
 
     initialise()
 
