@@ -4,13 +4,12 @@ _early_root = tk.Tk()
 _early_root.withdraw()
 import math
 from spatialmath import SE3
-from robotSystem import newRobotSystem
 from math import pi
 import threading, time
 import numpy as np
 
 class JointControlUI:
-    def __init__(self, botSystem: 'newRobotSystem', stop_event: threading.Event):
+    def __init__(self, botSystem: 'newRobotSystem'):
         # CONTAINS ALL ROBOT INFO 
         self.robotSystem = botSystem
         self.active_robot = botSystem.rebel  # Default active robot
@@ -21,8 +20,7 @@ class JointControlUI:
         self.root.deiconify()
 
         # --- Threading info ---
-        self.stop_event = stop_event
-        self.stop_event.clear()
+        self.stop_event = threading.Event()
         self.run_thread = None
 
         # --- Scheduled UI update handle (for debouncing slider events) ---
