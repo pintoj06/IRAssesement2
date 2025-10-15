@@ -14,10 +14,10 @@ class gripperObj:
     def __init__(self, envrionment: 'swift.Swift'):
         #Define DH parameters for gripper
         link1G1 = DHLink(d=0, a=0.09, alpha=0, qlim=[-pi, pi])
-        link2G1 = DHLink(d=0, a=0.08, alpha=0, qlim=[-pi, pi])
+        link2G1 = DHLink(d=0, a=0.05, alpha=0, qlim=[-pi, pi])
         
         link1G2 = DHLink(d=0, a=0.09, alpha=0, qlim=[-pi, pi])
-        link2G2 = DHLink(d=0, a=0.08, alpha=0, qlim=[-pi, pi])
+        link2G2 = DHLink(d=0, a=0.05, alpha=0, qlim=[-pi, pi])
         
         #Create the 2 DH gripper fingers which make up the gripper
         self.gripFing1 = DHRobot([link1G1, link2G1], name='gripper1')
@@ -30,12 +30,12 @@ class gripperObj:
         self.gripFing2 = cyl_viz.create_cylinders()
 
         #Define the joint angles for the closed configuration
-        self.qCloseG1 = [pi/3, -pi/3]
-        self.qCloseG2 = [-pi/3, pi/3]
+        self.qCloseG1 = [pi/6, -pi/3]
+        self.qCloseG2 = [-pi/6, pi/3]
         
         #Define the joint angles for the open configuration
-        self.qOpenG1 = [pi/2, -pi/2]
-        self.qOpenG2 = [-pi/2, pi/2]
+        self.qOpenG1 = [pi/3, -pi/3]
+        self.qOpenG2 = [-pi/3, pi/3]
 
         self.steps = 50
         self.env = envrionment
