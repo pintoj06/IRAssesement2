@@ -22,7 +22,8 @@ class collisions:
         self.centrifugeBase = collisionObj([0.24, 0.24, 0.14], [1.8, 4.2, 0.63], self.env) # Collision object for the centrifuge base
         self.ttHolder = collisionObj([0.26, 0.08, 0.11], [1.49, 3.56, 0.64], self.env) # Collision object for the test tube rack
 
-        self.testRRt = collisionObj([0.08, 0.33, 0.45], [1.84, 3.34, 0.75], self.env) # Collision object for the RRT testing object
+        self.testRRt = collisionObj([0.08, 0.33, 0.45], [1.9, 3.33, 0.72], self.env) # Collision object for the RRT testing object
+        self.avoidRebel = collisionObj([0.13, 0.13, 0.9], [1.2, 3.5, 0.975], self.env) # Collision object for the RRT testing object
 
         self.collisionObjList = [self.table, self.centrifugeBase, self.ttHolder] # List of all collision objects in the environment
     
@@ -117,7 +118,7 @@ class collisions:
         Use results from Q2.6 to keep calling jtraj until all step sizes are
         smaller than a given max steps size
         """
-        steps = 2
+        steps = 4
         while np.any(max_step_radians < np.abs(np.diff(jtraj(q1,q2,steps).q, axis= 0))):
             steps+=1
         return jtraj(q1,q2,steps).q
@@ -135,10 +136,10 @@ class collisions:
     def testRRTgp4(self):
         # Create the collision object for the RRT testing
         objRRT_file = '' # FOR JAYDEN TO FILL IN
-        objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CollisionObj.dae' # FOR HARRY
+        objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CollisionObj1.dae' # FOR HARRY
         objRRT = Mesh(filename = objRRT_file)
         self.env.add(objRRT)
-        objRRT.T = SE3(1.87, 3.34, 0.75).A
+        objRRT.T = SE3(1.87, 3.34, 0.65).A
 
 
 class collisionObj:
