@@ -21,6 +21,8 @@ from spatialgeometry import Mesh, Sphere
 import time
 from SpecimenLiquid import specimenLiquid
 import threading
+import serial
+
 class newRobotSystem:
     def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, stop_event: 'threading.Event', ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
         self.ttList = ttList # List of test tubes
@@ -54,14 +56,14 @@ class newRobotSystem:
         self.alarmhide = SE3(10, 10, 10).A # Position to hide the alarms (removing them caused an error)
         self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
 
-        greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
-        #greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        #greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
+        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
         self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
         self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
         self.env.add(self.greenAlarm) # Add the green alarm to the environment
 
-        redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
-        #redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        #redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
+        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
         self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
         self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
         self.env.add(self.redAlarm) # Add the red alarm to the environment
@@ -75,7 +77,7 @@ class newRobotSystem:
         self.greenAlarm.T = self.alarmhide # Hide green alarm
         self.redAlarm.T = self.alarmshow # Show red alarm
 
-        #self.testRRTPastObj()
+        self.testRRTPastObj()
         #self.returnToHome()
         self.fillTubes() # Fill the test tubes with sample
         self.moveToppers() # Move the toppers to the test tubes
@@ -131,9 +133,9 @@ class newRobotSystem:
         if self.useRRT:
             self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Move to robot starting position
             for i in range(len(self.ttList)): # Repeat the following for each test tube
-                self.primRRTgp4(self.gp4.ik_LM(self.topList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table]) # Move to topper using RRT
+                self.primRRTgp4(self.gp4.ik_LM(self.topList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table, self.collisionDet.avoidRebel]) # Move to topper using RRT
                 self.rmrcgp4(-0.14, 3) # Use RMRC to move directly down 0.14mm to pick up the topper 
-                self.primRRTgp4(self.gp4.ik_LM(self.ttList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table], moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) #Move directly to the test tube using RRT
+                self.primRRTgp4(self.gp4.ik_LM(self.ttList[i].startPos @ self.gp4Offset @ self.gp4RMRCoffset @ trotx(pi))[0], [self.collisionDet.testRRt, self.collisionDet.table, self.collisionDet.avoidRebel], moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) #Move directly to the test tube using RRT
                 self.rmrcgp4(-0.08, 3, moveObj=[self.topList[i]], objOffset=[self.topList[i].offset]) # Use RMRC to move the topper directly on top of the test tube
             self.jtrajMovegp4([0, pi/2, 0, 0, 0, 0]) # Move back to starting position
             self.jtrajMovegp4([-pi, pi/2, 0, 0, 0, 0]) # Rotate 180 degrees to be out of the way of the UR3
@@ -206,6 +208,7 @@ class newRobotSystem:
             self.gp4.q = qMatrix[x] # Update the current joint position of the gp4
             self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset # Attach the tool to the end effector of the gp4
             if self.collisionDet.collisionCheck(self.gp4): # Check for collisions at each step
+                print("COLLISION DETECTED - STOPPING SIMULATION")
                 raise collisionDetected()
             if moveObj is not None: # If there is an object passed in the function
                 for y in range(len(moveObj)): # For each object in the list
@@ -219,6 +222,7 @@ class newRobotSystem:
             self.rebel.q = qMatrix[x] # Update the current joint position of the ReBel
             self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) # Attach the tool to the end effector of the ReBel
             if self.collisionDet.collisionCheck(self.rebel): # Check for collsions at each step
+                print("COLLISION DETECTED - STOPPING SIMULATION")
                 raise collisionDetected()
             if moveObj is not None:
                 #move mesh1 and update other meshes accordingly
@@ -234,13 +238,13 @@ class newRobotSystem:
             self.ur3EE.gripFing1.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the first gripper finger to the end effector of the ur3 with its offset
             self.ur3EE.gripFing2.base = self.ur3.fkine(self.ur3.q).A @ self.ur3eeToolOffset # Attach the second gripper finger to the end effector of the ur3 with its offset
             if self.collisionDet.collisionCheck(self.ur3): # Check for collisions at each step
+                print("COLLISION DETECTED - STOPPING SIMULATION")
                 raise collisionDetected()
             if moveObj is not None: # If there is an object passed in the function
                 for y in range(len(moveObj)): # For each object in the list
                     try: # Try moving the meshObj, if it can not be found presume it's a specimenLiquid
                         moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y] # Attach the object to the end effector of the ur3
                     except: 
-                        print("couldnt access meshObj, presumed to be specimenLiquid")
                         moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y] # Attach the specimineLiquid to the end effector of the ur3
                         moveObj[y].updatePos() #Update the position of the specimenLiquid
 
@@ -249,6 +253,7 @@ class newRobotSystem:
     def primRRTgp4(self, endq, myObj:'list', moveObj:'list'=None, objOffset:'list'=None):
         collisions = []
         q1 = self.gp4.q
+        self.gp4.dhRobot.q = self.gp4.q
         q2 = endq
         q_waypoints = np.array([q1, q2]) # Start and end positions
         is_collision_check = True
@@ -260,10 +265,11 @@ class newRobotSystem:
             for i in range(start_waypoint, len(q_waypoints)-1):
                 q_matrix_join = self.collisionDet.interpolate_waypoints_radians([q_waypoints[i], q_waypoints[i+1]], np.deg2rad(10))
 
-                if not self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and not self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+                if not self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and not self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True): 
                     q_matrix.extend(q_matrix_join)
                     for q in q_matrix_join:
                         self.gp4.q = q
+                        self.gp4.dhRobot.q = q
                         self.checkGUIStop()
                         self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset
                         if moveObj is not None:
@@ -283,18 +289,18 @@ class newRobotSystem:
                         for q in q_matrix_join:
                             self.checkGUIStop()
                             self.gp4.q = q
+                            self.gp4.dhRobot.q = q
                             self.gp4EE.T = self.gp4.fkine(self.gp4.q).A @ self.gp4eeToolOffset
                             if moveObj is not None:
                                 for y in range(len(moveObj)):
                                     moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y]
                             self.env.step(0.03)
                         # Reached goal without collision, so break out
-                        print("reached goal")
                         break
                 else:
                     # Randomly pick a pose that is not in collision
                     q_rand = np.zeros(6)
-                    q_rand[0] = random.uniform(-17/18, 17/18) * np.pi
+                    q_rand[0] = random.uniform(-17/18, 0) * np.pi
                     q_rand[1] = random.uniform(-11/18, 13/18) * np.pi
                     q_rand[2] = random.uniform(-65/180, 20/18) * np.pi
                     q_rand[3] = random.uniform(-20/18, 20/18) * np.pi
@@ -302,10 +308,10 @@ class newRobotSystem:
                     q_rand[5] = random.uniform(-455/180, 455/180) * np.pi
                     q_rand = q_rand.tolist()  # Convert to a 3-element list
 
-                    while self.collisionDet.is_collision(self.gp4.dhRobot, [q_rand], myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.gp4.dhRobot, [q_rand], myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+                    while self.collisionDet.is_collision(self.gp4.dhRobot, [q_rand], myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) or self.collisionDet.is_collision(self.gp4.dhRobot, [q_rand], myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
                         self.checkGUIStop()
                         q_rand = np.zeros(6)
-                        q_rand[0] = random.uniform(-17/18, 17/18) * np.pi
+                        q_rand[0] = random.uniform(-17/18, 0) * np.pi
                         q_rand[1] = random.uniform(-11/18, 13/18) * np.pi
                         q_rand[2] = random.uniform(-65/180, 20/18) * np.pi
                         q_rand[3] = random.uniform(-20/18, 20/18) * np.pi
@@ -317,10 +323,9 @@ class newRobotSystem:
                     break
 
         # Check again
-        if self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+        if self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) or self.collisionDet.is_collision(self.gp4.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+            print("COLLISION DETECTED - STOPPING SIMULATION")
             raise collisionDetected()
-        else:
-            print('No collision found')
         
     def primRRTur3(self, endq, myObj, moveObj:'list'=None, objOffset:'list'=None):
         collisions = []
@@ -367,7 +372,6 @@ class newRobotSystem:
                                     try:
                                         moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
                                     except:
-                                        print("couldnt access meshObj, presumed to be specimenLiquid")
                                         moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
                                         moveObj[y].updatePos()
 
@@ -389,9 +393,8 @@ class newRobotSystem:
 
         # Check again
         if self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[0].faces, myObj[0].vertices, myObj[0].face_normals, collisions, return_once_found=True) and self.collisionDet.is_collision(self.ur3.dhRobot, q_matrix_join, myObj[1].faces, myObj[1].vertices, myObj[1].face_normals, collisions, return_once_found=True):
+            print("COLLISION DETECTED - STOPPING SIMULATION")
             raise collisionDetected()
-        else:
-            print('No collision found')
 
     def rmrcur3(self, movedown, time, moveObj:'list'=None, objOffset:'list'=None):
         # 1.1) Set parameters for the simulation
@@ -471,7 +474,6 @@ class newRobotSystem:
                     try:
                         moveObj[y].meshObj.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
                     except:
-                        print("couldnt access meshObj, presumed to be specimenLiquid")
                         moveObj[y].mesh1.T = self.ur3.fkine(self.ur3.q).A @ objOffset[y]
                         moveObj[y].updatePos()
                 
@@ -550,6 +552,7 @@ class newRobotSystem:
         for q in q_matrix:
             self.checkGUIStop()
             self.gp4.q = q
+            self.gp4.dhRobot.q = q
             if moveObj is not None:
                 for y in range(len(moveObj)):
                     moveObj[y].meshObj.T = self.gp4.fkine(self.gp4.q).A @ objOffset[y]
@@ -631,8 +634,7 @@ class newRobotSystem:
                 for y in range(len(moveObj)):
                     try: # Try moving the meshObj, if it can not be found presume it's a specimenLiquid
                         moveObj[y].meshObj.T = self.rebel.fkine(self.rebel.q).A @ objOffset[y] # Attach the object to the end effector of the ur3
-                    except: 
-                        print("couldnt access meshObj, presumed to be specimenLiquid")
+                    except:
                         moveObj[y].mesh1.T = self.rebel.fkine(self.rebel.q).A @ troty(pi/2) # Attach the specimineLiquid to the end effector of the ur3
                         moveObj[y].updatePos() #Update the position of the specimenLiquid
             self.rebelEE.T = self.rebel.fkine(self.rebel.q).A @troty(pi/2) #
@@ -650,7 +652,6 @@ class newRobotSystem:
             raise StopRequested()
 
 class collisionDetected(Exception):
-    print("COLLISION DETECTED - STOPPING SIMULATION")
     pass
 
 class StopRequested(Exception):
