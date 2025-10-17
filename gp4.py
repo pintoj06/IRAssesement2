@@ -101,7 +101,7 @@ class newGP4(DHRobot3D):
         # Axis pattern from URDF: z, +y, -y, -x, -y, -x
         # We encode that with 90° twists between joint axes.
         a =   [0.0, 0.260, 0.015, 0.0, 0.0, 0.0]
-        d =   [0.330, 0.0, 0.0, 0.290, 0.0, 0.072]
+        d =   [0.330, 0.0, 0.0, 0.290, 0.0, 0.078]
         alpha = [pi/2, 0,  pi/2, -pi/2,  pi/2, 0.0]
 
         # Joint limits from your Xacro (converted to radians); J6 unlimited-ish is clamped to ±(455°)
@@ -141,7 +141,7 @@ class newGP4(DHRobot3D):
 
     def createDHRobotForCollision(self):
         a =   [0.0, 0.260, 0.015, 0.0, 0.0, 0.0]
-        d =   [0.330, 0.0, 0.0, 0.290, 0.0, 0.072]
+        d =   [0.330, 0.0, 0.0, 0.290, 0.0, 0.2]
         alpha = [pi/2, 0,  pi/2, -pi/2,  pi/2, 0.0]
 
         # Joint limits from your Xacro (converted to radians); J6 unlimited-ish is clamped to ±(455°)
@@ -162,7 +162,7 @@ class newGP4(DHRobot3D):
 
         robot = DHRobot([link1, link2, link3, link4, link5, link6], name='gp4_DH')
 
-        cyl_viz = CylindricalDHRobotPlot(robot, cylinder_radius=0.000005, color="#3478f604")
+        cyl_viz = CylindricalDHRobotPlot(robot, cylinder_radius=0.0000001, color="#3478f604")
         robot = cyl_viz.create_cylinders()
 
         return robot
