@@ -124,7 +124,7 @@ def initialise():
     # Add the toppers to the environment
     topperFile = r'enivornmentFiles\Topper.dae' # FOR JAYDEN
     #topperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/Topper.dae' # FOR HARRY
-    topPlanePoint = SE3(1.92, 2.9, 0.6).A
+    topPlanePoint = SE3(1.92, 2.82, 0.6).A
     topyOff = SE3(0, 0.05, 0).A
 
     top1 = topperPython(topperFile, topPlanePoint, env)
