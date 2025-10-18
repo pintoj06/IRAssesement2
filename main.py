@@ -25,6 +25,7 @@ from IGUS_testcode import ReBeL
 from tkinterGUI import JointControlUI
 from SpecimenLiquid import specimenLiquid 
 import threading
+import serial
 
 stop_event = None
 
@@ -53,6 +54,7 @@ def initialise():
     specimen1LiquidList = []
     for i in range (1, 6): #change to 6 for 6 specimens after testing
         s1 = specimenLiquid(specimenLiquidFile, SE3(1.0, 3.1, 0.685).A, env)
+        
         specimen1LiquidList.append(s1)
                                   
     # Add UR3 and Move to starting position
@@ -170,9 +172,30 @@ def initialise():
 
     botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, stop_event, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList)
     GUI = JointControlUI(botSystem, stop_event)
+    print("GUI launched")
 
     #botSystem.simulation()
+  
+def checkForPress():
+    # arduino_port = '/dev/cu.usbmodem34B7DA63709C2' # FOR JAYDEN
+    arduino_port = '/dev/cu.usbmodem34B7DA63709C2' # FOR HARRY
+    baud_rate = 9600
 
+    ser = serial.Serial(arduino_port, baud_rate, timeout=1)
+    time.sleep(2)
+
+    try:
+        while True:
+            if ser.in_waiting >0:
+                line = ser.readline().decode(errors="ignore").strip()
+                if line:
+                    stop_event.set()
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        ser.close()
+        print("Serial port closed.")
 
 # ---------------------------------------------------------------------------------------#
 if __name__ == "__main__": 
@@ -185,6 +208,8 @@ if __name__ == "__main__":
     gp4 = newGP4()
 
     stop_event = threading.Event()
+    buttonPressThread = threading.Thread(target=checkForPress)
+    buttonPressThread.start()
 
     initialise()
 
