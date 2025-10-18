@@ -1,156 +1,597 @@
-import swift
+import tkinter as tk
+from tkinter import ttk
+_early_root = tk.Tk()
+_early_root.withdraw()
+import math
 from spatialmath import SE3
-from spatialmath.base import *
-from spatialgeometry import Cuboid, Sphere, Mesh
-from ir_support import RectangularPrism, line_plane_intersection
-from customUr3e import UR3e
-from gp4 import newGP4
+from math import pi
+import threading, time
 import numpy as np
-from roboticstoolbox import DHRobot, jtraj
-from typing import List
-from itertools import combinations
-from IGUS_testcode import ReBeL
+from robotSystem import newRobotSystem, collisionDetected
+from roboticstoolbox import trapezoidal
+from spatialmath.base import *
+
+class JointControlUI:
+    def __init__(self, botSystem: 'newRobotSystem', stop_event: threading.Event):
+        # CONTAINS ALL ROBOT INFO 
+        self.robotSystem = botSystem
+        self.active_robot = botSystem.rebel  # Default active robot
+
+        # Reuse early root
+        global _early_root
+        self.root = _early_root
+        self.root.deiconify()
+
+        # --- Threading info ---
+        self.stop_event = stop_event
+        self.stop_event.clear()
+        self.run_thread = None
+
+        # --- Scheduled UI update handle (for debouncing slider events) ---
+        self._update_job = None      # after() id
+        self._debounce_ms = 30       # tweak if you want snappier/smoother
+
+        # --- Main window ---
+        self.root.title("Industrial Robotics Control")
+        self.root.geometry("820x620")
+        self.root.configure(bg="#0F1115")
+
+        # --- Global style ---
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure("TFrame", background="#171A21")
+        style.configure("TLabel", foreground="#E8EDF2", background="#171A21", font=("Segoe UI", 10))
+        style.configure("TButton", font=("Segoe UI", 10, "bold"), padding=8)
+        style.configure("Title.TLabel", font=("Segoe UI", 12, "bold"))
+        style.configure("SubTitle.TLabel", font=("Segoe UI", 10, "bold"))
+        style.configure("TScale", background="#171A21")
+        style.configure("Run.TButton", foreground="#0F1115", background="#77E0A6")
+        style.map("Run.TButton", background=[("active", "#60C893")])
+        style.configure("Reset.TButton", foreground="#0F1115", background="#FFB454")
+        style.map("Reset.TButton", background=[("active", "#E5A24B")])
+        style.configure("EStop.TButton", foreground="white", background="#FF3B30")
+        style.map("EStop.TButton", background=[("active", "#E2362B")])
+
+        # --- Layout structure ---
+        self.root.rowconfigure(0, weight=0)  # top controls
+        self.root.rowconfigure(1, weight=1)  # bottom panels
+        self.root.columnconfigure(0, weight=1)
+
+        # --- Top control bar ---
+        top = ttk.Frame(self.root, padding=12)
+        top.grid(row=0, column=0, sticky="ew")
+        for i in range(4):
+            top.columnconfigure(i, weight=1)
+
+        ttk.Button(top, text="Run", style="Run.TButton", command=self.on_run).grid(row=0, column=0, sticky="ew", padx=5)
+        ttk.Button(top, text="Reset", style="Reset.TButton", command=self.on_reset).grid(row=0, column=1, sticky="ew", padx=5)
+        ttk.Button(top, text="Emergency Stop", style="EStop.TButton", command=self.on_estop).grid(row=0, column=2, sticky="ew", padx=5)
+
+        # -- Robot dropdown --
+        self.robot_map = {
+            "ReBeL": self.robotSystem.rebel,
+            "UR3": self.robotSystem.ur3,
+            "GP4": self.robotSystem.gp4
+        }
+
+        sel_row = ttk.Frame(self.root, padding=(12, 0, 12, 0))
+        sel_row.grid(row=0, column=0, sticky="e", pady=(52, 0))  # sits under buttons
+        ttk.Label(sel_row, text="Robot:", style="TLabel").grid(row=0, column=0, padx=(0, 6))
+        self.robot_choice = tk.StringVar(value=next(iter(self.robot_map)) if self.robot_map else "")
+        self.robot_select = ttk.Combobox(
+            sel_row,
+            textvariable=self.robot_choice,
+            values=list(self.robot_map.keys()),
+            state="readonly",
+            width=10
+        )
+        self.robot_select.grid(row=0, column=1, sticky="w")
+        self.robot_select.bind("<<ComboboxSelected>>", lambda _e: self._load_robot(self.robot_choice.get()))
+
+        # --- Bottom container ---
+        bottom = ttk.Frame(self.root, padding=15)
+        bottom.grid(row=1, column=0, sticky="nsew")
+        bottom.columnconfigure(0, weight=1)
+
+        # === Panel Mode Toggle (Joint / Cartesian / Simulation Control) ===
+        toggle_bar = ttk.Frame(bottom)
+        toggle_bar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        for i in range(4):
+            toggle_bar.columnconfigure(i, weight=1)
+
+        ttk.Label(toggle_bar, text="Panel:", style="SubTitle.TLabel").grid(row=0, column=0, sticky="w")
+
+        self.mode_var = tk.StringVar(value="joint")
+        self.btn_joint = ttk.Radiobutton(toggle_bar, text="Joint Angles", value="joint", variable=self.mode_var,
+                                         command=lambda: self._show_mode("joint"))
+        self.btn_cart  = ttk.Radiobutton(toggle_bar, text="Cartesian XYZ", value="cart", variable=self.mode_var,
+                                         command=lambda: self._show_mode("cart"))
+        self.btn_sim   = ttk.Radiobutton(toggle_bar, text="Simulation Control", value="sim", variable=self.mode_var,
+                                         command=lambda: self._show_mode("sim"))
+        self.btn_joint.grid(row=0, column=1, sticky="e", padx=(8, 4))
+        self.btn_cart.grid(row=0, column=2, sticky="w", padx=(4, 8))
+        self.btn_sim.grid(row=0, column=3, sticky="w", padx=(4, 8))
+
+        # === Panels stack ===
+        self.panel_stack = ttk.Frame(bottom)
+        self.panel_stack.grid(row=1, column=0, sticky="nsew")
+        self.panel_stack.columnconfigure(0, weight=1)
+        self.panel_stack.rowconfigure(0, weight=1)
+
+        # Build all panels
+        self._build_joint_panel(parent=self.panel_stack)
+        self._build_cartesian_panel(parent=self.panel_stack)
+        self._build_sim_panel(parent=self.panel_stack)
+
+        # Show initial mode
+        self._show_mode("joint")
+
+        # Initial push to robot so UI=robot
+        self._apply_current_angles()
+
+        # Start feedback loop for position readouts
+        self._start_feedback_loop()
+
+        self.root.mainloop()
+
+    # ---------- Build Panels ----------
+    def _build_joint_panel(self, parent):
+        self.joint_frame = ttk.Frame(parent)
+        self.joint_frame.grid(row=0, column=0, sticky="nsew")
+        self.joint_frame.columnconfigure(0, weight=1)
+        self.joint_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self.joint_frame, text="Teach Panel — Joint Angles (°)", style="Title.TLabel")\
+            .grid(row=0, column=0, columnspan=2, pady=(0, 10))
+
+        self.slider_vars = []
+        self.value_strs = []
+        self.scales = []
+
+        # Create 6 sliders, 2 columns
+        for i in range(6):
+            col = i % 2
+            row = (i // 2) * 2 + 1
+
+            joint_box = ttk.Frame(self.joint_frame)
+            joint_box.grid(row=row, column=col, sticky="ew", pady=(0, 2))
+            joint_box.columnconfigure(0, weight=1)
+            joint_box.columnconfigure(1, weight=0)
+
+            ttk.Label(joint_box, text=f"Joint {i+1}").grid(row=0, column=0, sticky="w")
+
+            # Default joint angles (deg): [0, 90, 90, 0, 0, 90]
+            default_angles = [0, 90, 90, 0, 0, 90]
+
+# Inside the for-loop for i in range(6):
+            initial_val = default_angles[i]
+            var = tk.DoubleVar(master=self.root, value=initial_val)
+            sv  = tk.StringVar(master=self.root, value=f"{initial_val:.1f}°")
 
 
-class collisions:
-    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL',  environment: 'swift'):
-        self.env = environment # Enviroment used for the simulation
-        self.ur3 = ur3 # UR3
-        self.gp4 = gp4 # GP4
-        self.rebel = rebel #ReBeL robot
-        self.table = collisionObj([1.17, 1.86, 0.55], [1.36, 3.69, 0.3], self.env) # Collision object for the table
-        self.centrifugeBase = collisionObj([0.24, 0.24, 0.14], [1.8, 4.2, 0.63], self.env) # Collision object for the centrifuge base
-        self.ttHolder = collisionObj([0.26, 0.08, 0.11], [1.49, 3.56, 0.64], self.env) # Collision object for the test tube rack
 
-        self.testRRt = collisionObj([0.08, 0.33, 0.45], [1.9, 3.33, 0.72], self.env) # Collision object for the RRT testing object
-        self.avoidRebel = collisionObj([0.13, 0.13, 0.9], [1.2, 3.5, 0.975], self.env) # Collision object for the RRT testing object
+            ttk.Label(joint_box, textvariable=sv).grid(row=0, column=1, sticky="e")
 
-        self.collisionObjList = [self.table, self.centrifugeBase, self.ttHolder] # List of all collision objects in the environment
-    
-    def collisionCheck(self, robot):
-        collisions = []
-        q = robot.q
-        robot.dhRobot.q = robot.q
-        #Check if any of the lines created between the joints is intersecting with any of the faces of the mesh
-        #This result function will provide at each step if there is a collision
-        for y in self.collisionObjList:
-            result = self.is_collision(robot.dhRobot, [q], y.faces, y.vertices, y.face_normals, collisions, env=self.env, return_once_found=True)
-            if result:
-                return True
-        return False
-    
-    def is_intersection_point_inside_triangle(self, intersect_p, triangle_verts):
-        u = triangle_verts[1, :] - triangle_verts[0, :]
-        v = triangle_verts[2, :] - triangle_verts[0, :]
+            scale = ttk.Scale(
+                self.joint_frame,
+                from_=-180, to=180,
+                orient="horizontal",
+                variable=var,
+                command=lambda v, idx=i, s=sv: self._on_slider_move(idx, v, s)
+            )
+            scale.grid(row=row+1, column=col, sticky="ew", pady=(0, 10))
 
-        uu = np.dot(u, u)
-        uv = np.dot(u, v)
-        vv = np.dot(v, v)
+            self.slider_vars.append(var)
+            self.value_strs.append(sv)
+            self.scales.append(scale)
 
-        w = intersect_p - triangle_verts[0, :]
-        wu = np.dot(w, u)
-        wv = np.dot(w, v)
+    def _build_cartesian_panel(self, parent):
+        """Button-driven XYZ jogging (front-end only)."""
+        self.cart_frame = ttk.Frame(parent)
+        # shown via _show_mode()
+        self.cart_frame.columnconfigure(0, weight=1)
+        self.cart_frame.columnconfigure(1, weight=1)
+        self.cart_frame.columnconfigure(2, weight=1)
 
-        D = uv * uv - uu * vv
+        ttk.Label(self.cart_frame, text="Teach Panel — Cartesian (X, Y, Z)", style="Title.TLabel")\
+            .grid(row=0, column=0, columnspan=3, pady=(0, 10), sticky="w")
 
-        # Get and test parametric coords (s and t)
-        s = (uv * wv - vv * wu) / D
-        if s < 0.0 or s > 1.0:  # intersect_p is outside Triangle
-            return 0
+        # XYZ state (front-end only)
+        self.cart_vars = {"X": tk.DoubleVar(value=0.00),
+                          "Y": tk.DoubleVar(value=0.00),
+                          "Z": tk.DoubleVar(value=0.20)}
+        self.cart_val_strs = {k: tk.StringVar(value=f"{self.cart_vars[k].get():.3f} m") for k in self.cart_vars}
 
-        t = (uv * wu - uu * wv) / D
-        if t < 0.0 or (s + t) > 1.0:  # intersect_p is outside Triangle
-            return False
+        # Step size selector (meters)
+        step_row = ttk.Frame(self.cart_frame)
+        step_row.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 8))
+        ttk.Label(step_row, text="Step:", style="SubTitle.TLabel").grid(row=0, column=0, padx=(0, 8))
+        self.step_var_m = tk.StringVar(value="0.010")  # 10 mm default
+        self.step_select = ttk.Combobox(step_row, textvariable=self.step_var_m,
+                                        values=["0.001", "0.005", "0.010", "0.020", "0.050", "0.100"],
+                                        width=6, state="readonly")
+        self.step_select.grid(row=0, column=1, sticky="w")
 
-        return True  # intersect_p is in Triangle
+        # Readout
+        readout = ttk.Frame(self.cart_frame)
+        readout.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 12))
+        for i in range(6):
+            readout.columnconfigure(i, weight=1)
 
+        ttk.Label(readout, text="X:").grid(row=0, column=0, sticky="e")
+        ttk.Label(readout, textvariable=self.cart_val_strs["X"]).grid(row=0, column=1, sticky="w")
+        ttk.Label(readout, text="Y:").grid(row=0, column=2, sticky="e")
+        ttk.Label(readout, textvariable=self.cart_val_strs["Y"]).grid(row=0, column=3, sticky="w")
+        ttk.Label(readout, text="Z:").grid(row=0, column=4, sticky="e")
+        ttk.Label(readout, textvariable=self.cart_val_strs["Z"]).grid(row=0, column=5, sticky="w")
 
-    def is_collision(self, robot, q_matrix, faces, vertex, face_normals, collisions=[], env=None, return_once_found=True):
-        """
-        This is based upon the output of questions 2.5 and 2.6
-        Given a robot model (robot), and trajectory (i.e. joint state vector) (q_matrix)
-        and triangle obstacles in the environment (faces,vertex,face_normals)
-        """
-        result = False
-        for i, q in enumerate(q_matrix):
-            # Get the transform of every joint (i.e. start and end of every link)
-            tr = self.get_link_poses(robot,q)
-            
-            # Go through each link and also each triangle face
-            for i in range(5):
-                for j, face in enumerate(faces):
-                    vert_on_plane = vertex[face][0]
-                    intersect_p, check = line_plane_intersection(face_normals[j], 
-                                                                vert_on_plane, 
-                                                                tr[i][:3,3], 
-                                                                tr[i+1][:3,3])
-                    # list of all triangle combination in a face
-                    triangle_list  = np.array(list(combinations(face,3)),dtype= int)
-                    if check == 1:
-                        for triangle in triangle_list:
-                            if self.is_intersection_point_inside_triangle(intersect_p, vertex[triangle]):
-                                # Create a red sphere in Swift at the intersection point IF environment passed - if lagging, reduce radius
-                                if env is not None:
-                                    new_collision = Sphere(radius=0.05, color=[1.0, 0.0, 0.0, 1.0])
-                                    new_collision.T = transl(intersect_p[0], intersect_p[1], intersect_p[2])
-                                    env.add(new_collision)
-                                    collisions.append(new_collision)
-                                    
-                                result = True
-                                if return_once_found:
-                                    return result
-                                break
-        return result
-    
-    def get_link_poses(self, robot:DHRobot,q=None)->List[np.ndarray]|np.ndarray:
-        """
-        :param q robot joint angles
-        :param robot -  seriallink robot model
-        :param transforms - list of transforms
-        """
-        if q is None:
-            return robot.fkine_all().A
-        return robot.fkine_all(q).A
-    
+        # XY pad and Z column
+        pad = ttk.Frame(self.cart_frame)
+        pad.grid(row=3, column=0, columnspan=3, sticky="nsew")
+        for c in range(5):
+            pad.columnconfigure(c, weight=1)
+        for r in range(3):
+            pad.rowconfigure(r, weight=1)
+
+        ttk.Button(pad, text="Y +", command=lambda: self._cart_step("Y", +1)).grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
+        ttk.Button(pad, text="X −", command=lambda: self._cart_step("X", -1)).grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
+        ttk.Label(pad, text="XY", style="SubTitle.TLabel").grid(row=1, column=1, sticky="nsew", padx=4, pady=4)
+        ttk.Button(pad, text="X +", command=lambda: self._cart_step("X", +1)).grid(row=1, column=2, sticky="nsew", padx=4, pady=4)
+        ttk.Button(pad, text="Y −", command=lambda: self._cart_step("Y", -1)).grid(row=2, column=1, sticky="nsew", padx=4, pady=4)
+
+        ttk.Button(pad, text="Z +", command=lambda: self._cart_step("Z", +1)).grid(row=0, column=4, sticky="nsew", padx=4, pady=4)
+        ttk.Label(pad, text="Z", style="SubTitle.TLabel").grid(row=1, column=4, sticky="nsew", padx=4, pady=4)
+        ttk.Button(pad, text="Z −", command=lambda: self._cart_step("Z", -1)).grid(row=2, column=4, sticky="nsew", padx=4, pady=4)
+
+        # Quick actions (still front-end only)
+        qa = ttk.Frame(self.cart_frame)
+        qa.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        qa.columnconfigure(0, weight=1)
+        qa.columnconfigure(1, weight=1)
+        ttk.Button(qa, text="Zero XY (stub)", command=lambda: self._cart_set(x=0.0, y=0.0, keep="Z")).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(qa, text="Home Z=0.20 (stub)", command=lambda: self._cart_set(z=0.20, keep="XY")).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+    def _build_sim_panel(self, parent):
+        """Simulation Control panel: test-tube specimen choices + live XYZ feedback per robot."""
+        self.sim_frame = ttk.Frame(parent)
+        # shown via _show_mode()
+        self.sim_frame.columnconfigure(0, weight=1)
+        self.sim_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self.sim_frame, text="Simulation Control", style="Title.TLabel")\
+            .grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
+
+        # --- Specimen selection for 6 test tubes ---
+        ttk.Label(self.sim_frame, text="Test Tubes — Specimen Selection", style="SubTitle.TLabel")\
+            .grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
+
+        tube_box = ttk.Frame(self.sim_frame)
+        tube_box.grid(row=2, column=0, columnspan=2, sticky="ew")
+        for c in range(3):
+            tube_box.columnconfigure(c, weight=1)
+
+        self.specimen_vars = []  # list of StringVars "1" or "2"
+        for i in range(6):
+            col = i % 3
+            row = i // 3
+            cell = ttk.Labelframe(tube_box, text=f"Tube {i+1}")
+            cell.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
+            cell.columnconfigure(0, weight=1)
+            v = tk.StringVar(value="1")
+            self.specimen_vars.append(v)
+            ttk.Radiobutton(cell, text="Specimen 1", value="1", variable=v).grid(row=0, column=0, sticky="w", padx=6, pady=2)
+            ttk.Radiobutton(cell, text="Specimen 2", value="2", variable=v).grid(row=1, column=0, sticky="w", padx=6, pady=2)
+
+        # --- Live XYZ feedback per robot ---
+        ttk.Label(self.sim_frame, text="Robot Pose Feedback (EE XYZ, m)", style="SubTitle.TLabel")\
+            .grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 6))
+
+        fb = ttk.Frame(self.sim_frame)
+        fb.grid(row=4, column=0, columnspan=2, sticky="ew")
+        for c in range(7):
+            fb.columnconfigure(c, weight=1)
+
+        # Headers
+        ttk.Label(fb, text="Robot").grid(row=0, column=0, sticky="w")
+        ttk.Label(fb, text="X").grid(row=0, column=2, sticky="w")
+        ttk.Label(fb, text="Y").grid(row=0, column=4, sticky="w")
+        ttk.Label(fb, text="Z").grid(row=0, column=6, sticky="w")
+
+        # Rows for each robot
+        self.pose_labels = {}  # {"ReBeL": (xVar,yVar,zVar), ...}
+        row = 1
+        for name in ["ReBeL", "UR3", "GP4"]:
+            ttk.Label(fb, text=name).grid(row=row, column=0, sticky="w")
+            xsv = tk.StringVar(value="0.000")
+            ysv = tk.StringVar(value="0.000")
+            zsv = tk.StringVar(value="0.000")
+            ttk.Label(fb, text="X:").grid(row=row, column=1, sticky="e")
+            ttk.Label(fb, textvariable=xsv).grid(row=row, column=2, sticky="w")
+            ttk.Label(fb, text="Y:").grid(row=row, column=3, sticky="e")
+            ttk.Label(fb, textvariable=ysv).grid(row=row, column=4, sticky="w")
+            ttk.Label(fb, text="Z:").grid(row=row, column=5, sticky="e")
+            ttk.Label(fb, textvariable=zsv).grid(row=row, column=6, sticky="w")
+            self.pose_labels[name] = (xsv, ysv, zsv)
+            row += 1
+
+        # Spacer / placeholder for future sim buttons
+        ttk.Frame(self.sim_frame).grid(row=5, column=0, columnspan=2, sticky="nsew", pady=(10,0))
+
+    # ---------- Mode switching ----------
+    def _show_mode(self, mode: str):
+        self._apply_current_angles()
+        """Show one panel and hide the others."""
+        # Hide all
+        for f in [getattr(self, 'joint_frame', None),
+                  getattr(self, 'cart_frame', None),
+                  getattr(self, 'sim_frame', None)]:
+            if f is not None:
+                f.grid_remove()
+
+        if mode == "joint":
+            self.joint_frame.grid(row=0, column=0, sticky="nsew")
+        elif mode == "cart":
+            self.cart_frame.grid(row=0, column=0, sticky="nsew")
+        else:
+            self.sim_frame.grid(row=0, column=0, sticky="nsew")
+
+    # ---------- Button callbacks ----------
+    def degrees_to_radians(self, angle_list):
+        return [math.radians(angle) for angle in angle_list]
+
+    def on_run(self):
+        if (self.run_thread and self.run_thread.is_alive()) or self.stop_event.is_set():
+            return
+        self.stop_event.clear()
+        self.run_thread = threading.Thread(target=self._run_motion, daemon=True)
+        self.run_thread.start()
+
+    def on_reset(self):
+        # Reset joint sliders
+        for v in getattr(self, "slider_vars", []):
+            v.set(0.0)
+        # Reset Cartesian readout to defaults
+        if hasattr(self, "cart_vars"):
+            self.cart_vars["X"].set(0.0)
+            self.cart_vars["Y"].set(0.0)
+            self.cart_vars["Z"].set(0.20)
+            for k in self.cart_vars:
+                self.cart_val_strs[k].set(f"{self.cart_vars[k].get():.3f} m")
+            if hasattr(self, "step_var_m"):
+                self.step_var_m.set("0.010")  # 10 mm
+        # Reset specimens to Specimen 1
+        for v in getattr(self, "specimen_vars", []):
+            v.set("1")
+
+        print("Reset pressed. Joint=0°, Cartesian defaults, Specimens=1.")
+        self.stop_event.clear()
+
+    def on_estop(self):
+        print("!!! EMERGENCY STOP ACTIVATED !!!")
+        self.stop_event.set()
+
+    # ---------- Joint slider handling ----------
+    def _on_slider_move(self, idx: int, val_str: str, label_var: tk.StringVar):
+        try:
+            val = float(val_str)
+        except ValueError:
+            return
+        label_var.set(f"{val:.1f}°")
+        self._schedule_apply()
+
+    def _schedule_apply(self):
+        if self._update_job is not None:
+            try:
+                self.root.after_cancel(self._update_job)
+            except Exception:
+                pass
+        self._update_job = self.root.after(self._debounce_ms, self._apply_current_angles)
+
+    def _apply_current_angles(self):
+        self._update_job = None
+        angles_deg = self.current_angles()
+        angles_rad = [math.radians(a) for a in angles_deg]
+
+        try:
+            self.active_robot.q = angles_rad
+        except Exception as e:
+            print(f"Set q warn: {e}")
+
+        try:
+            self.robotSystem.env.step()
+        except Exception as e:
+            print(f"env.step() warn: {e}")
+
+        self._update_ee_pose()
+
+    def _run_motion(self):
+        # Example: RMRC-like stepping loop (runs in thread)
+        print("SIMULATION STARTED")
+        self.robotSystem.simulation()
+        self.root.after(0, lambda: print("Motion finished or stopped."))
+
+    # ---------- Cartesian jogging (front-end only) ----------
+    def _cart_step(self, axis: str, direction: int):
+        try:
+            step = float(self.step_var_m.get()) if hasattr(self, "step_var_m") else 0.01
+        except ValueError:
+            step = 0.01
+
+        self.active_robot.q = self.active_robot.q
+        if axis == "X":
+            self.rmrc(int(direction) * float(step), 0, 0)
+        elif axis == "Y":
+            self.rmrc(0, int(direction) * float(step), 0)
+        elif axis == "Z":
+            self.rmrc(0, 0, int(direction) * float(step))
+
+    def _cart_set(self, x=None, y=None, z=None, keep=""):
+        if x is not None and "X" not in keep:
+            self.cart_vars["X"].set(x); self.cart_val_strs["X"].set(f"{x:.3f} m")
+        if y is not None and "Y" not in keep:
+            self.cart_vars["Y"].set(y); self.cart_val_strs["Y"].set(f"{y:.3f} m")
+        if z is not None and "Z" not in keep:
+            self.cart_vars["Z"].set(z); self.cart_val_strs["Z"].set(f"{z:.3f} m")
+
+    # ---------- Helpers ----------
+    def current_angles(self):
+        return [float(var.get()) for var in getattr(self, "slider_vars", [])]
+
+    def _load_robot(self, name: str):
+        self.active_name = name
+        self.active_robot = self.robot_map[name]
+        self._set_slider_range_from_qlim(self.active_robot)
+        current_q_deg = self._q_to_degrees(getattr(self.active_robot, "q", [0]*6))
+        for i, v in enumerate(current_q_deg[:6]):
+            self.slider_vars[i].set(v)
+
+    def _set_slider_range_from_qlim(self, robot):
+        qlim = getattr(robot, "qlim", None)
+        for i, scale in enumerate(self.scales):
+            if (qlim is not None) and (i < qlim.shape[1]):
+                lo_deg = math.degrees(float(qlim[0, i]))
+                hi_deg = math.degrees(float(qlim[1, i]))
+                lo, hi = (min(lo_deg, hi_deg), max(lo_deg, hi_deg))
+            else:
+                lo, hi = -180.0, 180.0
+            scale.configure(from_=lo, to=hi)
+
+    def _q_to_degrees(self, q_rad):
+        out = []
+        for i in range(6):
+            try:
+                out.append(math.degrees(float(q_rad[i])))
+            except Exception:
+                out.append(0.0)
+        return out
+
+    def _update_ee_pose(self):
+        """Keep EE pose visuals consistent across robots."""
+        if self.active_robot.name == 'rebel':
+            self.robotSystem.rebelEE.T  = self.robotSystem.rebel.fkine(self.robotSystem.rebel.q).A @ SE3.Ry(pi/2).A
+        elif self.active_robot.name == 'UR3':
+            self.robotSystem.ur3EE.gripFing1.base  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
+            self.robotSystem.ur3EE.gripFing2.base  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
+        elif self.active_robot.name == 'GP4':
+            self.robotSystem.gp4EE.T = self.robotSystem.gp4.fkine(self.robotSystem.gp4.q).A @ self.robotSystem.gp4eeToolOffset
+        else:
+            print("No EE update logic for this robot.")
+
+    # ---------- Live feedback loop ----------
+    def _start_feedback_loop(self):
+        """Refresh the XYZ readouts periodically."""
+        # create an after() loop
+        self._update_feedback_positions()
+        self.root.after(200, self._start_feedback_loop)
+
+    def _update_feedback_positions(self):
+        """Reads fkine(q) for each robot and updates stringvars. Front-end only."""
+        # Helper to safely compute X,Y,Z from robot fkine
+        def xyz_of(robot):
+            try:
+                T = robot.fkine(robot.q)
+                # spatialmath SE3: T.t is (3,), T.A[:3,3] also works
+                if hasattr(T, 't'):
+                    xyz = np.array(T.t, dtype=float).reshape(3)
+                else:
+                    xyz = np.array(T.A[:3, 3], dtype=float).reshape(3)
+                return float(xyz[0]), float(xyz[1]), float(xyz[2])
+            except Exception:
+                return 0.0, 0.0, 0.0
+
+        if hasattr(self, "pose_labels"):
+            for name, rob in [("ReBeL", self.robotSystem.rebel),
+                              ("UR3", self.robotSystem.ur3),
+                              ("GP4", self.robotSystem.gp4)]:
+                x, y, z = xyz_of(rob)
+                xsv, ysv, zsv = self.pose_labels[name]
+                xsv.set(f"{x:.3f}")
+                ysv.set(f"{y:.3f}")
+                zsv.set(f"{z:.3f}")
+
+    def rmrc(self, delta_x, delta_y, delta_z):
+    # 1.1) Set parameters for the simulation
+        t = 1                                     # Total time (s)
+        delta_t = 0.02                               # Control frequency
+        steps = int(t/delta_t)                       # No. of steps for simulation
+        delta = 2*pi/steps                           # Small angle change
+        epsilon = 0.1                                # Threshold value for manipulability/Damped Least Squares
+        W = np.diag([1, 1, 1, 0.1, 0.1, 0.1])          # Weighting matrix for the velocity vector
+
+        # 1.2) Allocate array data
+        m = np.zeros([steps,1])                      # Array for Measure of Manipulability
+        q_matrix = np.zeros([steps,6])               # Array for joint angles
+        qdot = np.zeros([steps,6])                   # Array for joint velocities
+        theta = np.zeros([3,steps])                  # Array for roll-pitch-yaw angles
+        x = np.zeros([3,steps])                      # Array for x-y-z trajectory
+        position_error = np.zeros([3,steps])         # For plotting trajectory error
+        angle_error = np.zeros([3,steps])            # For plotting trajectory error
+
+        # 1.3) Set up trajectory, initial pose
+        s = trapezoidal(0,1,steps).q
+        currentPos = self.active_robot.fkine(self.active_robot.q).A    # Trapezoidal trajectory scalar
+        R0 = currentPos[:3, :3]
+        rpy0 = tr2rpy(R0, order='xyz')
+        for i in range(steps):
+            x[0,i] = currentPos[0,3] + delta_x * s[i]   # Points in x
+            x[1,i] = currentPos[1,3] + delta_y * s[i]   # Points in y
+            x[2,i] = currentPos[2,3] + delta_z * s[i]   # Points in z
+            theta[0,i] = 0                              # Roll angle 
+            theta[1,i] = 0                              # Pitch angle
+            theta[2,i] = 0                              # Yaw angle
         
-    def fine_interpolation(self, q1, q2, max_step_radians = np.deg2rad(1))->np.ndarray:
-        """
-        Use results from Q2.6 to keep calling jtraj until all step sizes are
-        smaller than a given max steps size
-        """
-        steps = 4
-        while np.any(max_step_radians < np.abs(np.diff(jtraj(q1,q2,steps).q, axis= 0))):
-            steps+=1
-        return jtraj(q1,q2,steps).q
+        T = transl(x[:,0]) @ rpy2tr(theta[0,0], theta[1,0], theta[2,0])  # First pose
+        q0 = self.active_robot.q                                                # Initial guess
+        q_matrix[0,:] = self.active_robot.q                     # First waypoint IK
+        qlim = np.transpose(self.active_robot.qlim)
 
-    def interpolate_waypoints_radians(self, waypoint_radians, max_step_radians = np.deg2rad(1))->np.ndarray:
-        """
-        Given a set of waypoints, finely intepolate them
-        """
-        q_matrix = []
-        for i in range(np.size(waypoint_radians,0)-1):
-            for q in self.fine_interpolation(waypoint_radians[i], waypoint_radians[i+1], max_step_radians):
-                q_matrix.append(q)
-        return q_matrix
+        # 1.4) Track the trajectory with RMRC
+        for i in range(steps-1):
+            T = self.active_robot.fkine(q_matrix[i,:]).A                        # FK at current state
+            delta_x = x[:,i+1] - T[:3,3]                                 # Position error
+            Rd = rpy2r(theta[0,i+1], theta[1,i+1], theta[2,i+1])         # Desired rotation
+            Ra = T[:3,:3]                                                # Actual rotation
+            Rdot = (1/delta_t)*(Rd - Ra)                                 # Rotation error rate
+            S = Rdot @ Ra.T                                              # Skew-symmetric
+            linear_velocity = (1/delta_t)*delta_x
+            angular_velocity = np.array([S[2,1], S[0,2], S[1,0]])        # From skew
+            delta_theta = tr2rpy(Rd @ Ra.T, order='xyz')                 # Angle error
+            xdot = W @ np.vstack((linear_velocity.reshape(3,1),
+                                angular_velocity.reshape(3,1)))        # EE velocity
+            J = self.active_robot.jacob0(q_matrix[i,:])                         # Jacobian
+            m[i] = np.sqrt(np.linalg.det(J @ J.T))
+            if m[i] < epsilon:                                           # DLS damping
+                m_lambda = (1 - m[i]/epsilon) * 0.05
+            else:
+                m_lambda = 0
+            inv_j = np.linalg.inv(J.T @ J + m_lambda * np.eye(6)) @ J.T  # DLS inverse
+            qdot[i,:] = (inv_j @ xdot).T                                 # Joint velocities
 
-    def testRRTgp4(self):
-        # Create the collision object for the RRT testing
-        objRRT_file = '' # FOR JAYDEN TO FILL IN
-        objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CollisionObj1.dae' # FOR HARRY
-        objRRT = Mesh(filename = objRRT_file)
-        self.env.add(objRRT)
-        objRRT.T = SE3(1.87, 3.34, 0.65).A
+            for j in range(6):                                           # Joint limits
+                if q_matrix[i,j] + delta_t*qdot[i,j] < qlim[j,0]:
+                    qdot[i,j] = 0
+                elif q_matrix[i,j] + delta_t*qdot[i,j] > qlim[j,1]:
+                    qdot[i,j] = 0
+            
+            q_matrix[i+1,:] = q_matrix[i,:] + delta_t*qdot[i,:]          # Integrate
 
+            position_error[:,i] = x[:,i+1] - T[:3,3]                     # For plotting
+            angle_error[:,i] = delta_theta
+        # 1.5) Plot the results
+        for q in q_matrix:
+            self.robotSystem.checkGUIStop()
+            self.active_robot.q = q
+            self._update_ee_pose()
+            if self.robotSystem.collisionDet.collisionCheck(self.active_robot): # Check for collsions at each step
+                print("COLLISION DETECTED - STOPPING SIMULATION")
+                raise collisionDetected()
+                        
+            currentPos = self.active_robot.fkine(self.active_robot.q).A
+            self.cart_vars["Y"].set(float(currentPos[0,3])); self.cart_val_strs["X"].set(f"{float(currentPos[0,3]):.3f} m")
+            self.cart_vars["Y"].set(float(currentPos[1,3])); self.cart_val_strs["Y"].set(f"{float(currentPos[1,3]):.3f} m")
+            self.cart_vars["Y"].set(float(currentPos[2,3])); self.cart_val_strs["Z"].set(f"{float(currentPos[2,3]):.3f} m")
 
-class collisionObj:
-    def __init__(self, size: 'list', centre: 'SE3', environment: 'swift'):
-        self.lwh = size # Python list containing the desired length (X), width (Y), height (Z) of the cuboid object
-        self.centre = centre  # Python list containing XYZ centre of cuboid
-        self.pose = transl(self.centre)       # Define the pose of the centre of the cuboid
-        # Create prism/cuboid and set desired pose
-        self.collisionObj = Cuboid(scale=self.lwh, color=[0.0, 1.0, 0.0, 0.00001])   # Set colour to green, but with some transparency to see through it (RGBA)
-        self.collisionObj.T = self.pose # Set the pose of the cuboid
-        self.env = environment # Enviorment used for the simulation
-        self.env.add(self.collisionObj) # add the collision cuboid to the environment
-
-        self.vertices, self.faces, self.face_normals = RectangularPrism(self.lwh[0], self.lwh[1], self.lwh[2], center=self.centre).get_data() # Get the vertecies, faces and face_normals of the collision object
+            for i in range(6):
+                self.slider_vars[i].set(self.active_robot.q[i])
+            
+            self.robotSystem.env.step(0.01)
