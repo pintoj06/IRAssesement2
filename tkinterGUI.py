@@ -7,9 +7,12 @@ from spatialmath import SE3
 from math import pi
 import threading, time
 import numpy as np
+from robotSystem import newRobotSystem, collisionDetected
+from roboticstoolbox import trapezoidal
+from spatialmath.base import *
 
 class JointControlUI:
-    def __init__(self, botSystem: 'newRobotSystem'):
+    def __init__(self, botSystem: 'newRobotSystem', stop_event: threading.Event):
         # CONTAINS ALL ROBOT INFO 
         self.robotSystem = botSystem
         self.active_robot = botSystem.rebel  # Default active robot
@@ -20,7 +23,8 @@ class JointControlUI:
         self.root.deiconify()
 
         # --- Threading info ---
-        self.stop_event = threading.Event()
+        self.stop_event = stop_event
+        self.stop_event.clear()
         self.run_thread = None
 
         # --- Scheduled UI update handle (for debouncing slider events) ---
@@ -411,10 +415,24 @@ class JointControlUI:
             step = float(self.step_var_m.get()) if hasattr(self, "step_var_m") else 0.01
         except ValueError:
             step = 0.01
-        current = self.cart_vars[axis].get()
-        new_val = current + (direction * step)
-        self.cart_vars[axis].set(new_val)
-        self.cart_val_strs[axis].set(f"{new_val:.3f} m")
+
+        currentPos = self.active_robot.fkine(self.active_robot.q).A 
+
+        if axis == "X":
+            self.rmrc(int(direction) * float(step), 0, 0)
+        elif axis == "Y":
+            self.rmrc(0, int(direction) * float(step), 0)
+        elif axis == "Z":
+            self.rmrc(0, 0, int(direction) * float(step))
+        
+    def trapMove(self, q1, q2):
+        steps = 100
+        s = trapezoidal(0, 1, steps).q                                                                      # Create the scalar function
+        q_matrix = np.empty((steps, 6))                                                                     # Create memory allocation for variables
+        for i in range(steps):
+            q_matrix[i, :] = (1 - s[i]) * q1 + s[i] * q2
+        
+        return q_matrix
 
     def _cart_set(self, x=None, y=None, z=None, keep=""):
         if x is not None and "X" not in keep:
@@ -461,7 +479,8 @@ class JointControlUI:
         if self.active_robot.name == 'rebel':
             self.robotSystem.rebelEE.T  = self.robotSystem.rebel.fkine(self.robotSystem.rebel.q).A @ SE3.Ry(pi/2).A
         elif self.active_robot.name == 'UR3':
-            self.robotSystem.ur3EE.T  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
+            self.robotSystem.ur3EE.gripFing1.base  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
+            self.robotSystem.ur3EE.gripFing2.base  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
         elif self.active_robot.name == 'GP4':
             self.robotSystem.gp4EE.T = self.robotSystem.gp4.fkine(self.robotSystem.gp4.q).A @ self.robotSystem.gp4eeToolOffset
         else:
@@ -498,3 +517,79 @@ class JointControlUI:
                 xsv.set(f"{x:.3f}")
                 ysv.set(f"{y:.3f}")
                 zsv.set(f"{z:.3f}")
+
+    def rmrc(self, delta_x, delta_y, delta_z):
+    # 1.1) Set parameters for the simulation
+        t = 1                                     # Total time (s)
+        delta_t = 0.02                               # Control frequency
+        steps = int(t/delta_t)                       # No. of steps for simulation
+        delta = 2*pi/steps                           # Small angle change
+        epsilon = 0.1                                # Threshold value for manipulability/Damped Least Squares
+        W = np.diag([1, 1, 1, 0.1, 0.1, 0.1])          # Weighting matrix for the velocity vector
+
+        # 1.2) Allocate array data
+        m = np.zeros([steps,1])                      # Array for Measure of Manipulability
+        q_matrix = np.zeros([steps,6])               # Array for joint angles
+        qdot = np.zeros([steps,6])                   # Array for joint velocities
+        theta = np.zeros([3,steps])                  # Array for roll-pitch-yaw angles
+        x = np.zeros([3,steps])                      # Array for x-y-z trajectory
+        position_error = np.zeros([3,steps])         # For plotting trajectory error
+        angle_error = np.zeros([3,steps])            # For plotting trajectory error
+
+        # 1.3) Set up trajectory, initial pose
+        s = trapezoidal(0,1,steps).q
+        currentPos = self.active_robot.fkine(self.active_robot.q).A    # Trapezoidal trajectory scalar
+        for i in range(steps):
+            x[0,i] = currentPos[0,3] + delta_x * s[i]   # Points in x
+            x[1,i] = currentPos[1,3] + delta_y * s[i]   # Points in y
+            x[2,i] = currentPos[2,3] + delta_z * s[i]   # Points in z
+            theta[0,i] = 0                              # Roll angle 
+            theta[1,i] = 0                              # Pitch angle
+            theta[2,i] = 0                              # Yaw angle
+        
+        T = transl(x[:,0]) @ rpy2tr(theta[0,0], theta[1,0], theta[2,0])  # First pose
+        q0 = self.active_robot.q                                                # Initial guess
+        q_matrix[0,:] = self.active_robot.ikine_LM(T, q0).q                     # First waypoint IK
+        qlim = np.transpose(self.active_robot.qlim)
+
+        # 1.4) Track the trajectory with RMRC
+        for i in range(steps-1):
+            T = self.active_robot.fkine(q_matrix[i,:]).A                        # FK at current state
+            delta_x = x[:,i+1] - T[:3,3]                                 # Position error
+            Rd = rpy2r(theta[0,i+1], theta[1,i+1], theta[2,i+1])         # Desired rotation
+            Ra = T[:3,:3]                                                # Actual rotation
+            Rdot = (1/delta_t)*(Rd - Ra)                                 # Rotation error rate
+            S = Rdot @ Ra.T                                              # Skew-symmetric
+            linear_velocity = (1/delta_t)*delta_x
+            angular_velocity = np.array([S[2,1], S[0,2], S[1,0]])        # From skew
+            delta_theta = tr2rpy(Rd @ Ra.T, order='xyz')                 # Angle error
+            xdot = W @ np.vstack((linear_velocity.reshape(3,1),
+                                angular_velocity.reshape(3,1)))        # EE velocity
+            J = self.active_robot.jacob0(q_matrix[i,:])                         # Jacobian
+            m[i] = np.sqrt(np.linalg.det(J @ J.T))
+            if m[i] < epsilon:                                           # DLS damping
+                m_lambda = (1 - m[i]/epsilon) * 0.05
+            else:
+                m_lambda = 0
+            inv_j = np.linalg.inv(J.T @ J + m_lambda * np.eye(6)) @ J.T  # DLS inverse
+            qdot[i,:] = (inv_j @ xdot).T                                 # Joint velocities
+
+            for j in range(6):                                           # Joint limits
+                if q_matrix[i,j] + delta_t*qdot[i,j] < qlim[j,0]:
+                    qdot[i,j] = 0
+                elif q_matrix[i,j] + delta_t*qdot[i,j] > qlim[j,1]:
+                    qdot[i,j] = 0
+            
+            q_matrix[i+1,:] = q_matrix[i,:] + delta_t*qdot[i,:]          # Integrate
+
+            position_error[:,i] = x[:,i+1] - T[:3,3]                     # For plotting
+            angle_error[:,i] = delta_theta
+        # 1.5) Plot the results
+        for q in q_matrix:
+            self.robotSystem.checkGUIStop()
+            self.active_robot.q = q
+            self._update_ee_pose()
+            if self.robotSystem.collisionDet.collisionCheck(self.active_robot): # Check for collsions at each step
+                print("COLLISION DETECTED - STOPPING SIMULATION")
+                raise collisionDetected()
+            self.robotSystem.env.step(0.01)
