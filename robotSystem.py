@@ -56,14 +56,14 @@ class newRobotSystem:
         self.alarmhide = SE3(10, 10, 10).A # Position to hide the alarms (removing them caused an error)
         self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
 
-        #greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
-        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
+        #greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
         self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
         self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
         self.env.add(self.greenAlarm) # Add the green alarm to the environment
 
-        #redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
-        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
+        #redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
         self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
         self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
         self.env.add(self.redAlarm) # Add the red alarm to the environment
@@ -77,8 +77,8 @@ class newRobotSystem:
         self.greenAlarm.T = self.alarmhide # Hide green alarm
         self.redAlarm.T = self.alarmshow # Show red alarm
 
-        self.testRRTPastObj()
-        #self.returnToHome()
+        #self.testRRTPastObj()
+        
         self.fillTubes() # Fill the test tubes with sample
         self.moveToppers() # Move the toppers to the test tubes
         self.moveToCentrifuge() # Move the test tubes to the centrifuge
@@ -301,7 +301,7 @@ class newRobotSystem:
                     # Randomly pick a pose that is not in collision
                     q_rand = np.zeros(6)
                     q_rand[0] = random.uniform(-17/18, 0) * np.pi
-                    q_rand[1] = random.uniform(-11/18, 13/18) * np.pi
+                    q_rand[1] = random.uniform(0, 13/18) * np.pi
                     q_rand[2] = random.uniform(-65/180, 20/18) * np.pi
                     q_rand[3] = random.uniform(-20/18, 20/18) * np.pi
                     q_rand[4] = random.uniform(-123/180, 123/180) * np.pi
@@ -312,7 +312,7 @@ class newRobotSystem:
                         self.checkGUIStop()
                         q_rand = np.zeros(6)
                         q_rand[0] = random.uniform(-17/18, 0) * np.pi
-                        q_rand[1] = random.uniform(-11/18, 13/18) * np.pi
+                        q_rand[1] = random.uniform(0, 13/18) * np.pi
                         q_rand[2] = random.uniform(-65/180, 20/18) * np.pi
                         q_rand[3] = random.uniform(-20/18, 20/18) * np.pi
                         q_rand[4] = random.uniform(-123/180, 123/180) * np.pi
