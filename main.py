@@ -28,6 +28,7 @@ import threading
 import serial
 
 stop_event = None
+restart_event = None
 
 # ---------------------------------------------------------------------------------------#
 def initialise():
@@ -36,7 +37,7 @@ def initialise():
 
     # 1) Create Environment
     envFile = r'enivornmentFiles\CentrifugeEnvironment.dae' # FOR JAYDEN
-    #envFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeEnvironment.dae' # FOR HARRY
+    envFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeEnvironment.dae' # FOR HARRY
     envRoom = Mesh(filename = envFile) 
     env.add(envRoom)
 
@@ -50,7 +51,7 @@ def initialise():
     
     # 2) Add Specimen Liquid
     specimenLiquidFile = r'enivornmentFiles\3DSPECIMENLIQUID.dae' # FOR JAYDEN
-    #specimenLiquidFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/3DSPECIMENLIQUID.dae' # FOR HARRY
+    specimenLiquidFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/3DSPECIMENLIQUID.dae' # FOR HARRY
     specimen1LiquidList = []
     for i in range (1, 6): #change to 6 for 6 specimens after testing
         s1 = specimenLiquid(specimenLiquidFile, SE3(1.0, 3.1, 0.685).A, env)
@@ -83,28 +84,28 @@ def initialise():
 
     # Add centrifuge base and move to starting position
     cenBaseFile = r'enivornmentFiles\CentrifugeBottom.dae'
-    #cenBaseFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeBottom.dae' # FOR HARRY'
+    cenBaseFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeBottom.dae' # FOR HARRY'
     cenBase = Mesh(filename = cenBaseFile)
     cenBase.T = SE3(1.8, 4.2, 0.68).A #1.1, 4.2
     env.add(cenBase)
 
     # Add centrifuge top and move to starting position
     cenTopFile = r'enivornmentFiles\CentrifugeTop.dae' # FOR JAYDEN
-    #cenTopFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeTop.dae' # FOR HARRY
+    cenTopFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CentrifugeTop.dae' # FOR HARRY
     cenTop = Mesh(filename = cenTopFile)
     cenTop.T = cenBase.T @ SE3(-0.003, 0.138, 0.0372).A @ trotx(-4*pi/5) #0.46
     env.add(cenTop)
 
     # Add test tube Rack and Move to starting position
     testTubeRackFile = r'enivornmentFiles\TesttubeRack.dae' # FOR JAYDEN
-    #testTubeRackFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TesttubeRack.dae' # FOR HARRY
+    testTubeRackFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TesttubeRack.dae' # FOR HARRY
     testTubeRack = Mesh(filename = testTubeRackFile)
     testTubeRack.T = SE3(1.51, 3.55, 0.585).A @ trotz(pi/2) #1.36
     env.add(testTubeRack)
 
     # Add specimens to extract liquid from 
     specimen1File = r'enivornmentFiles\Specimen1.dae' # FOR JAYDEN
-    #specimen1File = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/specimen1.dae' # FOR HARRY
+    specimen1File = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/specimen1.dae' # FOR HARRY
     specimen1 = Mesh(filename = specimen1File)
     specimen1.T = SE3(1.0, 3.1, 0.65).A @ trotz(pi/2) #1.36
     env.add(specimen1)
@@ -117,7 +118,7 @@ def initialise():
 
     # Add topper end effector and attach to the GP4
     topperEEFile = r'enivornmentFiles\topperEE.dae' # FOR JAYDEN
-    #topperEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/topperEE.dae' # FOR HARRY
+    topperEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/topperEE.dae' # FOR HARRY
     topperEE = Mesh(filename = topperEEFile)
     topperEEOffset = trotx(pi) @ SE3(-0.07, 0, 0).A
     topperEE.T = gp4.fkine(gp4.q).A @ topperEEOffset
@@ -125,7 +126,7 @@ def initialise():
 
     # Add the toppers to the environment
     topperFile = r'enivornmentFiles\Topper.dae' # FOR JAYDEN
-    #topperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/Topper.dae' # FOR HARRY
+    topperFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/Topper.dae' # FOR HARRY
     topPlanePoint = SE3(1.92, 2.82, 0.6).A
     topyOff = SE3(0, 0.05, 0).A
 
@@ -148,7 +149,7 @@ def initialise():
 
     #Rebel gripper 
     pippetteEEFile = r'enivornmentFiles\pippettev2.dae' # FOR JAYDEN
-    #pippetteEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/pippette.dae' # FOR HARRY
+    pippetteEEFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/pippette.dae' # FOR HARRY
     pipetteEE = Mesh(filename = pippetteEEFile)
     pipetteEEOffset = SE3(-0.16243,0,0)
     pipetteEE.T = rebel.fkine(rebel.q).A @ troty(pi/2)  
@@ -159,7 +160,7 @@ def initialise():
 
     # Add Test Tubes to Rack
     testTubeFileName = r'enivornmentFiles\TestTube.dae' # FOR JAYDEN
-    #testTubeFileName = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TestTube.dae' # FOR HARRY
+    testTubeFileName = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TestTube.dae' # FOR HARRY
     tt1 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.075, 3.548, 0.65).A, SE3(1.8, 4.13, 0.68).A, env)
     tt2 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.029, 3.548, 0.65).A, SE3(1.736, 4.175, 0.68).A, env)
     tt3 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.018, 3.548, 0.65).A, SE3(1.866, 4.172, 0.68).A, env)
@@ -170,11 +171,10 @@ def initialise():
 
     env.step(0.1)
 
-    botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, stop_event, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList)
-    GUI = JointControlUI(botSystem, stop_event)
+    botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, stop_event, restart_event, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList)
+    GUI = JointControlUI(botSystem, stop_event, restart_event)
     print("GUI launched")
 
-    #botSystem.simulation()
   
 def checkForPress():
     # arduino_port = '/dev/cu.usbmodem34B7DA63709C2' # FOR JAYDEN
@@ -208,6 +208,7 @@ if __name__ == "__main__":
     gp4 = newGP4()
 
     stop_event = threading.Event()
+    restart_event = threading.Event()
     buttonPressThread = threading.Thread(target=checkForPress)
     buttonPressThread.start()
 
