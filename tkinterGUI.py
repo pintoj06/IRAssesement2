@@ -319,6 +319,7 @@ class JointControlUI:
 
     # ---------- Mode switching ----------
     def _show_mode(self, mode: str):
+        self._apply_current_angles()
         """Show one panel and hide the others."""
         # Hide all
         for f in [getattr(self, 'joint_frame', None),
@@ -416,23 +417,13 @@ class JointControlUI:
         except ValueError:
             step = 0.01
 
-        currentPos = self.active_robot.fkine(self.active_robot.q).A 
-
+        self.active_robot.q = self.active_robot.q
         if axis == "X":
             self.rmrc(int(direction) * float(step), 0, 0)
         elif axis == "Y":
             self.rmrc(0, int(direction) * float(step), 0)
         elif axis == "Z":
             self.rmrc(0, 0, int(direction) * float(step))
-        
-    def trapMove(self, q1, q2):
-        steps = 100
-        s = trapezoidal(0, 1, steps).q                                                                      # Create the scalar function
-        q_matrix = np.empty((steps, 6))                                                                     # Create memory allocation for variables
-        for i in range(steps):
-            q_matrix[i, :] = (1 - s[i]) * q1 + s[i] * q2
-        
-        return q_matrix
 
     def _cart_set(self, x=None, y=None, z=None, keep=""):
         if x is not None and "X" not in keep:
@@ -539,6 +530,8 @@ class JointControlUI:
         # 1.3) Set up trajectory, initial pose
         s = trapezoidal(0,1,steps).q
         currentPos = self.active_robot.fkine(self.active_robot.q).A    # Trapezoidal trajectory scalar
+        R0 = currentPos[:3, :3]
+        rpy0 = tr2rpy(R0, order='xyz')
         for i in range(steps):
             x[0,i] = currentPos[0,3] + delta_x * s[i]   # Points in x
             x[1,i] = currentPos[1,3] + delta_y * s[i]   # Points in y
@@ -549,7 +542,7 @@ class JointControlUI:
         
         T = transl(x[:,0]) @ rpy2tr(theta[0,0], theta[1,0], theta[2,0])  # First pose
         q0 = self.active_robot.q                                                # Initial guess
-        q_matrix[0,:] = self.active_robot.ikine_LM(T, q0).q                     # First waypoint IK
+        q_matrix[0,:] = self.active_robot.q                     # First waypoint IK
         qlim = np.transpose(self.active_robot.qlim)
 
         # 1.4) Track the trajectory with RMRC
@@ -592,4 +585,13 @@ class JointControlUI:
             if self.robotSystem.collisionDet.collisionCheck(self.active_robot): # Check for collsions at each step
                 print("COLLISION DETECTED - STOPPING SIMULATION")
                 raise collisionDetected()
+                        
+            currentPos = self.active_robot.fkine(self.active_robot.q).A
+            self.cart_vars["Y"].set(float(currentPos[0,3])); self.cart_val_strs["X"].set(f"{float(currentPos[0,3]):.3f} m")
+            self.cart_vars["Y"].set(float(currentPos[1,3])); self.cart_val_strs["Y"].set(f"{float(currentPos[1,3]):.3f} m")
+            self.cart_vars["Y"].set(float(currentPos[2,3])); self.cart_val_strs["Z"].set(f"{float(currentPos[2,3]):.3f} m")
+
+            for i in range(6):
+                self.slider_vars[i].set(self.active_robot.q[i])
+            
             self.robotSystem.env.step(0.01)
