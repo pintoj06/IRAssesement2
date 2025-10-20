@@ -136,7 +136,7 @@ class collisions:
     def testRRTgp4(self):
         # Create the collision object for the RRT testing
         objRRT_file = '' # FOR JAYDEN TO FILL IN
-        #objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CollisionObj1.dae' # FOR HARRY
+        objRRT_file = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/CollisionObj1.dae' # FOR HARRY
         objRRT = Mesh(filename = objRRT_file)
         self.env.add(objRRT)
         objRRT.T = SE3(1.87, 3.34, 0.65).A
