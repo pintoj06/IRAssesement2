@@ -24,7 +24,7 @@ import threading
 import serial
 
 class newRobotSystem:
-    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, stop_event: 'threading.Event', ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
+    def __init__(self, ur3: 'UR3e', gp4: 'newGP4', rebel: 'ReBeL', cenTop, stop_event, restart_event: 'threading.Event', ttList: 'list', topList: 'list', env: 'swift.Swift', ee: 'list' = [], eeToolOffset: 'list' = [], specimen1LiquidList: 'list' = []):
         self.ttList = ttList # List of test tubes
         self.topList = topList # List of toppers
         self.env = env # Environment
@@ -57,18 +57,19 @@ class newRobotSystem:
         self.alarmshow = SE3(2.53, 2.18, 1.5).A # Position of alarm on wall
 
         greenAlarmFile = 'greenAlarm.dae' #FOR JAYDEN
-        #greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
+        greenAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/greenAlarm.dae' # FOR HARRY
         self.greenAlarm = Mesh(filename = greenAlarmFile) # Create the green alarm object
         self.greenAlarm.T = self.alarmshow # Start with the green alarm showing
         self.env.add(self.greenAlarm) # Add the green alarm to the environment
 
         redAlarmFile = 'redAlarm.dae' # FOR JAYDEN 
-        #redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
+        redAlarmFile = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/redAlarm.dae' # FOR HARRY
         self.redAlarm = Mesh(filename = redAlarmFile) # Create the red alarm object
         self.redAlarm.T = self.alarmhide # Start with the grredeen alarm showing
         self.env.add(self.redAlarm) # Add the red alarm to the environment
 
         self.stop_event = stop_event # Event to stop the simulation thread when emergency stop is pressed
+        self.restart_event = restart_event # Event to restart the simulation after emergency stop is pressed
 
 
 
@@ -649,7 +650,21 @@ class newRobotSystem:
     def checkGUIStop(self):
         if self.stop_event.is_set():
             print("E-STOP PRESSED, STOPPING SIMULATION")
-            raise StopRequested()
+            self.stop_event.clear()
+            self.restart_event.clear()
+            while self.isPaused():
+                time.sleep(0.02)
+            print("E-STOP DISENGAGED")
+            while self.restartSim():
+                time.sleep(0.02)
+            self.stop_event.clear()
+            self.restart_event.clear()
+
+    def isPaused(self):
+        return (self.stop_event is not None) and not self.stop_event.is_set()
+    
+    def restartSim(self):
+        return (self.restart_event is not None) and not self.restart_event.is_set()
 
 class collisionDetected(Exception):
     pass
