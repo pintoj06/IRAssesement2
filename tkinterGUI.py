@@ -12,10 +12,12 @@ from roboticstoolbox import trapezoidal
 from spatialmath.base import *
 
 class JointControlUI:
-    def __init__(self, botSystem: 'newRobotSystem', stop_event: threading.Event):
+    def __init__(self, botSystem: 'newRobotSystem', stop_event: threading.Event, restart_event: threading.Event):
         # CONTAINS ALL ROBOT INFO 
         self.robotSystem = botSystem
         self.active_robot = botSystem.rebel  # Default active robot
+
+        self.inStart = True
 
         # Reuse early root
         global _early_root
@@ -25,6 +27,8 @@ class JointControlUI:
         # --- Threading info ---
         self.stop_event = stop_event
         self.stop_event.clear()
+        self.restart_event = restart_event
+        self.restart_event.clear()
         self.run_thread = None
 
         # --- Scheduled UI update handle (for debouncing slider events) ---
@@ -340,11 +344,15 @@ class JointControlUI:
         return [math.radians(angle) for angle in angle_list]
 
     def on_run(self):
+        self.restart_event.set()
         if (self.run_thread and self.run_thread.is_alive()) or self.stop_event.is_set():
             return
-        self.stop_event.clear()
-        self.run_thread = threading.Thread(target=self._run_motion, daemon=True)
-        self.run_thread.start()
+        if self.inStart:
+            self.stop_event.clear()
+            self.run_thread = threading.Thread(target=self._run_motion, daemon=True)
+            self.run_thread.start()
+            self.inStart = False
+        
 
     def on_reset(self):
         # Reset joint sliders
@@ -363,11 +371,9 @@ class JointControlUI:
         for v in getattr(self, "specimen_vars", []):
             v.set("1")
 
-        print("Reset pressed. Joint=0°, Cartesian defaults, Specimens=1.")
         self.stop_event.clear()
 
     def on_estop(self):
-        print("!!! EMERGENCY STOP ACTIVATED !!!")
         self.stop_event.set()
 
     # ---------- Joint slider handling ----------
@@ -391,16 +397,6 @@ class JointControlUI:
         self._update_job = None
         angles_deg = self.current_angles()
         angles_rad = [math.radians(a) for a in angles_deg]
-
-        try:
-            self.active_robot.q = angles_rad
-        except Exception as e:
-            print(f"Set q warn: {e}")
-
-        try:
-            self.robotSystem.env.step()
-        except Exception as e:
-            print(f"env.step() warn: {e}")
 
         self._update_ee_pose()
 
@@ -474,8 +470,6 @@ class JointControlUI:
             self.robotSystem.ur3EE.gripFing2.base  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
         elif self.active_robot.name == 'GP4':
             self.robotSystem.gp4EE.T = self.robotSystem.gp4.fkine(self.robotSystem.gp4.q).A @ self.robotSystem.gp4eeToolOffset
-        else:
-            print("No EE update logic for this robot.")
 
     # ---------- Live feedback loop ----------
     def _start_feedback_loop(self):
