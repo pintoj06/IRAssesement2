@@ -398,6 +398,16 @@ class JointControlUI:
         angles_deg = self.current_angles()
         angles_rad = [math.radians(a) for a in angles_deg]
 
+        try:
+            self.active_robot.q = angles_rad
+        except Exception as e:
+            print(f"Set q warn: {e}")
+
+        try:
+            self.robotSystem.env.step()
+        except Exception as e:
+            print(f"env.step() warn: {e}")
+
         self._update_ee_pose()
 
     def _run_motion(self):
@@ -470,6 +480,8 @@ class JointControlUI:
             self.robotSystem.ur3EE.gripFing2.base  = self.robotSystem.ur3.fkine(self.robotSystem.ur3.q).A @ self.robotSystem.ur3eeToolOffset
         elif self.active_robot.name == 'GP4':
             self.robotSystem.gp4EE.T = self.robotSystem.gp4.fkine(self.robotSystem.gp4.q).A @ self.robotSystem.gp4eeToolOffset
+        else:
+            print("No EE update logic for this robot.")
 
     # ---------- Live feedback loop ----------
     def _start_feedback_loop(self):
