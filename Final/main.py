@@ -160,7 +160,7 @@ def initialise():
 
     # Add Test Tubes to Rack
     testTubeFileName = r'enivornmentFiles\TestTube.dae' # FOR JAYDEN
-    testTubeFileName = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/environmentFiles/TestTube.dae' # FOR HARRY
+    testTubeFileName = '/Users/harrymentis/Documents/SensorsAndControls/Assignment2/EnivornmentFiles/TestTube.dae' # FOR HARRY
     tt1 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.075, 3.548, 0.65).A, SE3(1.8, 4.13, 0.68).A, env)
     tt2 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] + 0.029, 3.548, 0.65).A, SE3(1.736, 4.175, 0.68).A, env)
     tt3 = testTubePython(testTubeFileName, SE3(testTubeRack.T[0, 3] - 0.018, 3.548, 0.65).A, SE3(1.866, 4.172, 0.68).A, env)
@@ -174,12 +174,11 @@ def initialise():
     dummy = Mesh(filename = dummyFile)
     dummy.T = SE3(1.5, 1.8, 0.1).A @ trotz(pi)
     env.add(dummy)
-    dummyMoveThread = threading.Thread(target=moveDummy(dummy))
+    dummyMoveThread = threading.Thread(target=moveDummy, args=(dummy,))
 
-    dummyMoveThread.start()
     env.step(0.1)
 
-    botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, stop_event, restart_event, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList, specimen2LiquidList)
+    botSystem = newRobotSystem(ur3, gp4, rebel, cenTop, stop_event, restart_event, dummyMoveThread, ttList, topList, env, [grippers, topperEE, pipetteEE], [gripperOffset, topperEEOffset, pipetteEEOffset], specimen1LiquidList, specimen2LiquidList)
     GUI = JointControlUI(botSystem, stop_event, restart_event)
     print("GUI launched")
     
@@ -209,11 +208,11 @@ def checkForPress():
 
 def moveDummy(dummy):
     print("IN")
-    rot1 = np.linspace(pi, pi/2, 100, endpoint=True) #First step front arm rotation
+    rot1 = np.linspace(pi, pi/2, 50, endpoint=True) #First step front arm rotation
     for i in rot1:
         dummy.T = SE3(1.5, 1.8, 0.1).A @ trotz(i)
         env.step(0.05)
-    trans = np.linspace(1.5, 2.2, 100, endpoint=True)
+    trans = np.linspace(1.5, 2.2, 50, endpoint=True)
     for i in trans:
         dummy.T = SE3(i, 1.8, 0.1).A @ trotz(pi/2)
         env.step(0.05)
